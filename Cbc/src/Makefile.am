@@ -139,7 +139,6 @@ cbc_SOURCES = CoinSolve.cpp
 
 # Additional libraries
 cbc_LDADD = libCbcSolver.la libCbc.la $(CBCLIB_LFLAGS)
-#cbc_DEPENDENCIES = libCbcSolver.la libCbc.la $(CBCLIB_DEPENDENCIES) $(ASL_DEPENDENCIES)
 
 endif
 
@@ -169,7 +168,6 @@ cbc_generic_SOURCES = \
 	CbcGenSolvers.cpp
 
 cbc_generic_LDADD = libCbcSolver.la libCbc.la $(CBCGENERIC_LFLAGS)
-# cbc_generic_DEPENDENCIES = libCbcSolver.la libCbc.la $(CBCGENERIC_DEPENDENCIES)
 
 # List all additionally required solver and Osi libraries
 # the linker flags for all available LP solvers should already be included in $CBCGENERIC_LIBS,
