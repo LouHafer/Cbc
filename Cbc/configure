@@ -662,6 +662,8 @@ OSICBC_DFLT_SOLVER_SPX_FALSE
 OSICBC_DFLT_SOLVER_SPX_TRUE
 OSICBC_DFLT_SOLVER_MSK_FALSE
 OSICBC_DFLT_SOLVER_MSK_TRUE
+OSICBC_DFLT_SOLVER_HIGHS_FALSE
+OSICBC_DFLT_SOLVER_HIGHS_TRUE
 OSICBC_DFLT_SOLVER_GRB_FALSE
 OSICBC_DFLT_SOLVER_GRB_TRUE
 OSICBC_DFLT_SOLVER_GLPK_FALSE
@@ -22157,6 +22159,8 @@ case $cbc_default_solver in
       ;;
    glpk)
       ;;
+  highs)
+      ;;
  soplex)
       ;;
       *)
@@ -22372,6 +22376,12 @@ case "${osicbc_with_solver}" in
     osi_uc_solver=GRB ;
     osi_exists_solver=${coin_has_grb-"unavailable"}
     ;;
+  [H][i][g][h][s]*)
+    osi_lc_solver=highs ;
+    osi_mc_solver=HiGHS ;
+    osi_uc_solver=HIGHS ;
+    osi_exists_solver=${coin_has_highs-"unavailable"}
+    ;;
   [Mm][Ss][Kk]*)
     osi_lc_solver=msk ;
     osi_mc_solver=Msk
@@ -22478,6 +22488,14 @@ fi
 else
   OSICBC_DFLT_SOLVER_GRB_TRUE='#'
   OSICBC_DFLT_SOLVER_GRB_FALSE=
+fi
+
+ if test $osi_mc_solver = HiGHS; then
+  OSICBC_DFLT_SOLVER_HIGHS_TRUE=
+  OSICBC_DFLT_SOLVER_HIGHS_FALSE='#'
+else
+  OSICBC_DFLT_SOLVER_HIGHS_TRUE='#'
+  OSICBC_DFLT_SOLVER_HIGHS_FALSE=
 fi
 
  if test $osi_mc_solver = Msk; then
@@ -22991,6 +23009,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${OSICBC_DFLT_SOLVER_GRB_TRUE}" && test -z "${OSICBC_DFLT_SOLVER_GRB_FALSE}"; then
   as_fn_error $? "conditional \"OSICBC_DFLT_SOLVER_GRB\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${OSICBC_DFLT_SOLVER_HIGHS_TRUE}" && test -z "${OSICBC_DFLT_SOLVER_HIGHS_FALSE}"; then
+  as_fn_error $? "conditional \"OSICBC_DFLT_SOLVER_HIGHS\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${OSICBC_DFLT_SOLVER_MSK_TRUE}" && test -z "${OSICBC_DFLT_SOLVER_MSK_FALSE}"; then
