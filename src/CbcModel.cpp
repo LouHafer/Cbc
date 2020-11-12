@@ -5576,7 +5576,7 @@ void CbcModel::branchAndBound(int doStatistics)
     OsiClpSolverInterface *clpSolver
       = dynamic_cast< OsiClpSolverInterface * >(solver_);
     if (clpSolver)
-      clpSolver->setFakeObjective(reinterpret_cast< double * >(NULL));
+      clpSolver->setFakeObjective(static_cast< double * >(NULL));
   }
 #endif
   moreSpecialOptions_ = saveMoreSpecialOptions;
@@ -6036,7 +6036,7 @@ CbcModel::CbcModel(const OsiSolverInterface &rhs)
   solver_ = rhs.clone();
   ownership_ |= 0x80000000; // model now owns solver
   handler_ = new CoinMessageHandler();
-  if (!solver_->defaultHandler() && solver_->messageHandler()->logLevel(0) != -1000)
+  if (!solver_->defaultHandler() && solver_->messageHandler() && solver_->messageHandler()->logLevel(0) != -1000)
     passInMessageHandler(solver_->messageHandler());
   handler_->setLogLevel(2);
   messages_ = CbcMessage();
@@ -6705,7 +6705,8 @@ CbcModel::operator=(const CbcModel &rhs)
     continuousPriority_ = rhs.continuousPriority_;
     numberUpdateItems_ = rhs.numberUpdateItems_;
     maximumNumberUpdateItems_ = rhs.maximumNumberUpdateItems_;
-    delete[] updateItems_;
+    if (updateItems_ != NULL)
+      delete[] updateItems_;
     if (maximumNumberUpdateItems_) {
       updateItems_ = new CbcObjectUpdateData[maximumNumberUpdateItems_];
       for (i = 0; i < maximumNumberUpdateItems_; i++)
@@ -6938,7 +6939,8 @@ void CbcModel::gutsOfDestructor()
   delete[] originalColumns_;
   originalColumns_ = NULL;
   delete strategy_;
-  delete[] updateItems_;
+  if (updateItems_ != NULL)
+      delete[] updateItems_;
   updateItems_ = NULL;
   numberUpdateItems_ = 0;
   maximumNumberUpdateItems_ = 0;
@@ -15386,7 +15388,9 @@ int CbcModel::chooseBranch(CbcNode *&newNode, int numberPassesLeft,
     } else {
       OsiBranchingInformation usefulInfo = usefulInformation();
       anyAction = newNode->chooseOsiBranch(this, oldNode, &usefulInfo, branchingState);
+#ifndef SAVE_NODE_INFO
       currentNode_ = NULL;
+#endif
       //branchingState=0;
     }
     if (!oldNode) {

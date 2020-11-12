@@ -1181,6 +1181,7 @@ int CbcClpUnitTest(const CbcModel &saveModel,
 		   int callBack(CbcModel *currentSolver, int whereFrom),
 		   CbcSolverUsefulData &parameterData);
 
+//#define CBC_THREAD_SAFE
 #ifdef CBC_THREAD_SAFE
 // Copies of some input decoding
 
@@ -2001,34 +2002,27 @@ int CbcMain1(int argc, const char *argv[],
         numberGoodCommands++;
         if (type == CBC_PARAM_ACTION_BAB && goodModel) {
           if (clqstrAction == "before") { //performing clique strengthening before initial solve
-        CglCliqueStrengthening clqStr(model_.solver());
-        int logLevel = model_.messageHandler()->logLevel();
-        int slogLevel = model_.solver()->messageHandler()->logLevel();
-        logLevel = CoinMin(logLevel,slogLevel);
-        model_.solver()->messageHandler()->setLogLevel(logLevel);
-        clqStr.passInMessageHandler(model_.messageHandler());
-        clqStr.strengthenCliques(2);
-        model_.solver()->messageHandler()->setLogLevel(0);
+            CglCliqueStrengthening clqStr(model_.solver(), model_.messageHandler());
+            clqStr.strengthenCliques(2);
 
-        if (clqStr.constraintsExtended() + clqStr.constraintsDominated() > 0) {
-          model_.solver()->initialSolve();
+            if (clqStr.constraintsExtended() + clqStr.constraintsDominated() > 0) {
+              model_.solver()->initialSolve();
 
-          if (!noPrinting_) {
-            if (model_.solver()->isProvenPrimalInfeasible()) {
-              sprintf(generalPrint, "Clique Strengthening says infeasible!");
-              generalMessageHandler->message(CLP_GENERAL, generalMessages)
-              << generalPrint
-              << CoinMessageEol;
-            } else {
-              sprintf(generalPrint, "After applying Clique Strengthening continuous objective value is %.2lf", model_.solver()->getObjValue());
-              generalMessageHandler->message(CLP_GENERAL, generalMessages)
-              << generalPrint
-              << CoinMessageEol;
+              if ((!noPrinting_) && (model_.messageHandler()->logLevel())) {
+                if (model_.solver()->isProvenPrimalInfeasible()) {
+                  sprintf(generalPrint, "Clique Strengthening says infeasible!");
+                  generalMessageHandler->message(CLP_GENERAL, generalMessages)
+                  << generalPrint
+                  << CoinMessageEol;
+                } else {
+                  sprintf(generalPrint, "After applying Clique Strengthening continuous objective value is %.2lf", model_.solver()->getObjValue());
+                  generalMessageHandler->message(CLP_GENERAL, generalMessages)
+                  << generalPrint
+                  << CoinMessageEol;
+                }
+              }
             }
           }
-        }
-        model_.solver()->messageHandler()->setLogLevel(slogLevel);
-      }
 #if CBC_USE_INITIAL_TIME==1
           if (model_.useElapsedTime())
             model_.setDblParam(CbcModel::CbcStartSeconds, CoinGetTimeOfDay());
@@ -4482,6 +4476,8 @@ int CbcMain1(int argc, const char *argv[],
                     process.setTimeLimit(babModel_->getMaximumSeconds() - babModel_->getCurrentSeconds(), babModel_->useElapsedTime());
                     if (model.getKeepNamesPreproc())
                       process.setKeepColumnNames(true);
+		    if (keepPPN)
+		      babModel_->setKeepNamesPreproc(1);
 		    setPreProcessingMode(saveSolver,1);
                     solver2 = process.preProcessNonDefault(*saveSolver, translate[preProcess], numberPasses,
                       tunePreProcess);
@@ -5173,53 +5169,39 @@ int CbcMain1(int argc, const char *argv[],
     clqstrAction = "off";
 	      } else if (cgraphAction == "clq") {
 		// old style
-		CglClique clique;
-		clique.setStarCliqueReport(false);
-		clique.setRowCliqueReport(false);
-		clique.setMinViolation(0.05);
-		int translate[] = { -100, -1, -99, -98, 1, -1098 };
-		babModel_->addCutGenerator(&clique, translate[cliqueAction],
-					   "Clique");
 		cliqueAction = 0;
 		oddWheelAction = 0;
 		clqstrAction = "off";
 	      }
               if (clqstrAction == "after") {
-                  CglCliqueStrengthening clqStr(babModel_->solver());
-		  // Printing should be at babModel level not solver
-		  int logLevel = babModel_->messageHandler()->logLevel();
-		  int slogLevel = babModel_->solver()->messageHandler()->logLevel();
-		  logLevel = CoinMin(logLevel,slogLevel);
-		  babModel_->solver()->messageHandler()->setLogLevel(logLevel);
-                  clqStr.passInMessageHandler(babModel_->messageHandler());
-                  clqStr.strengthenCliques(4);
-		  babModel_->solver()->messageHandler()->setLogLevel(slogLevel);
+                CglCliqueStrengthening clqStr(babModel_->solver(), babModel_->messageHandler());
+                clqStr.strengthenCliques(4);
 
-                  if (clqStr.constraintsExtended() + clqStr.constraintsDominated() > 0) {
-		    OsiSolverInterface * solver = babModel_->solver();
-		    bool takeHint;
-		    OsiHintStrength strength;
-		    solver->getHintParam(OsiDoDualInResolve,
-					 takeHint, strength);
-                    solver->setHintParam(OsiDoDualInResolve, false,OsiHintTry);
-                    solver->resolve();
-                    solver->setHintParam(OsiDoDualInResolve, takeHint,strength);
+                if (clqStr.constraintsExtended() + clqStr.constraintsDominated() > 0) {
+		  OsiSolverInterface * solver = babModel_->solver();
+		  bool takeHint;
+		  OsiHintStrength strength;
+		  solver->getHintParam(OsiDoDualInResolve,
+		      		 takeHint, strength);
+                  solver->setHintParam(OsiDoDualInResolve, false,OsiHintTry);
+                  solver->resolve();
+                  solver->setHintParam(OsiDoDualInResolve, takeHint,strength);
 
-                    if (!noPrinting_) {
-                      if (solver->isProvenPrimalInfeasible()) {
-                        sprintf(generalPrint, "Clique Strengthening says infeasible!");
-                        generalMessageHandler->message(CLP_GENERAL, generalMessages)
-                          << generalPrint
-                          << CoinMessageEol;
-                      } else {
-                      	sprintf(generalPrint, "After applying Clique Strengthening continuous objective value is %.2lf", solver->getObjValue());
-                        generalMessageHandler->message(CLP_GENERAL, generalMessages)
-                          << generalPrint
-                          << CoinMessageEol;
-                      }
+                  if (!noPrinting_ && (babModel_->messageHandler()->logLevel())) {
+                    if (solver->isProvenPrimalInfeasible()) {
+                      sprintf(generalPrint, "Clique Strengthening says infeasible!");
+                      generalMessageHandler->message(CLP_GENERAL, generalMessages)
+                        << generalPrint
+                        << CoinMessageEol;
+                    } else {
+                    	sprintf(generalPrint, "After applying Clique Strengthening continuous objective value is %.2lf", solver->getObjValue());
+                      generalMessageHandler->message(CLP_GENERAL, generalMessages)
+                        << generalPrint
+                        << CoinMessageEol;
                     }
-                  }
-              }
+                  } // results of clique Strengthening stengthening
+                } // checking impact of clique Strengthening stengthening
+              } // clique Strengthening
 
               // now tighten bounds
               if (!miplib) {
@@ -5331,20 +5313,21 @@ int CbcMain1(int argc, const char *argv[],
                 for (iColumn = 0; iColumn < numberColumns; iColumn++) {
                   if (babModel_->isInteger(iColumn)) {
                     sort[n] = n;
-                    if (useCosts == 1)
+                    if (useCosts == 1) {
                       dsort[n++] = -fabs(objective[iColumn]);
-                    else if (useCosts == 2)
+                    } else if (useCosts == 2) {
                       dsort[n++] = iColumn;
-                    else if (useCosts == 3)
-                      dsort[n++] = upper[iColumn] - lower[iColumn];
-                    else if (useCosts == 4)
-                      dsort[n++] = -(upper[iColumn] - lower[iColumn]);
-                    else if (useCosts == 5)
+                    } else if (useCosts == 3) {
+                      dsort[n++] = (upper[iColumn]-lower[iColumn])==1.0 ?1:2;
+                    } else if (useCosts == 4) {
+                      dsort[n++] = (upper[iColumn]-lower[iColumn])!=1.0 ?1:2;
+                    } else if (useCosts == 5) {
                       dsort[n++] = -columnLength[iColumn];
-                    else if (useCosts == 6)
+                    } else if (useCosts == 6) {
                       dsort[n++] = (columnLength[iColumn] == 1) ? -1.0 : 0.0;
-                    else if (useCosts == 7)
+                    } else if (useCosts == 7) {
                       dsort[n++] = (objective[iColumn]) ? -1.0 : 0.0;
+		    }
                   }
                 }
                 CoinSort_2(dsort, dsort + n, sort);
@@ -5529,6 +5512,8 @@ int CbcMain1(int argc, const char *argv[],
               if (miplib && !storedAmpl.sizeRowCuts()) {
                 printf("looking at probing\n");
                 babModel_->addCutGenerator(&storedAmpl, 1, "Stored");
+                accuracyFlag[numberGenerators] = 0;
+                switches[numberGenerators++] = 0;
               }
 #endif
               if (knapsackAction) {
@@ -5588,6 +5573,17 @@ int CbcMain1(int argc, const char *argv[],
                 bkCliqueGen.setExtendingMethod(bkClqExtMethod);
                 bkCliqueGen.setPivotingStrategy(bkPivotingStrategy);
                 babModel_->addCutGenerator(&bkCliqueGen, translate[cliqueAction], "Clique");
+                accuracyFlag[numberGenerators] = 0;
+                switches[numberGenerators++] = 0;
+	      } else if (cgraphAction == "clq") {
+		// old style
+		CglClique clique;
+		clique.setStarCliqueReport(false);
+		clique.setRowCliqueReport(false);
+		clique.setMinViolation(0.05);
+		// ifmove
+		babModel_->addCutGenerator(&clique, -99,
+					   "Clique");
                 accuracyFlag[numberGenerators] = 0;
                 switches[numberGenerators++] = 0;
               }
@@ -7539,8 +7535,13 @@ int CbcMain1(int argc, const char *argv[],
 		  double value = simplex->getMinIntervalProgressUpdate();
 		  if (value<=0.0) {
 		    babModel_->setSecsPrintFrequency(-1.0);
-		    if (value<0.0) {
+		    if (value<-1.0) {
 		      babModel_->setPrintFrequency(static_cast<int>(-value));
+		    } else {
+		      if (babModel_->getNumCols() > 2000)
+			babModel_->setPrintFrequency(100);
+		      else
+			babModel_->setPrintFrequency(1000);
 		    }
 		  } else {
 		    babModel_->setSecsPrintFrequency(value);
@@ -12946,6 +12947,8 @@ static int nautiedConstraints(CbcModel &model, int maxPass)
 }
 #endif
 
+static char cbcCrashAnnounced = 0;
+
 #ifdef HAVE_EXECINFO_H
 #ifdef HAVE_SIGNAL_H
 void CbcCrashHandler( int sig ) {
@@ -12989,7 +12992,11 @@ void CbcCrashHandler( int sig ) {
   fprintf(stderr, "\n\n"); fflush(stderr);
 
   free (strings);
-  exit(1);
+
+  if (!cbcCrashAnnounced) {
+      cbcCrashAnnounced = 1;
+      abort();
+  }
 #undef MAX_FRAMES
 }
 #endif

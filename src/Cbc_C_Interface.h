@@ -60,17 +60,26 @@ enum DualPivot {
   DP_Dantzig    = 1,  /*! Simple strategy, implemented as example. */
   DP_Steepest   = 2,  /*! Default strategy */
   DP_Partial    = 3,  /*! Same as steepest, but examines a subset of choices. */
-  DP_PESteepest = 4  /*! Positive edge criterion, tries to avoid degenerate moves. Influenced by the psi parameter */
+  DP_PESteepest = 4   /*! Positive edge criterion, tries to avoid degenerate moves. Influenced by the psi parameter */
 };
 
 /*! Type of cutting plane */
 enum CutType {
-  CT_Gomory         = 0,  /*! Gomory cuts obtained from the tableau */
-  CT_MIR            = 1,  /*! Mixed integer rounding cuts */
-  CT_ZeroHalf       = 2,  /*! Zero-half cuts */
-  CT_Clique         = 3,  /*! Clique cuts */
-  CT_KnapsackCover  = 4,  /*! Knapsack cover cuts */
-  CT_LiftAndProject = 5   /*! Lift and project cuts */
+  CT_Probing          =  0,  /*! Cuts generated evaluating the impact of fixing bounds for integer variables */
+  CT_Gomory           =  1,  /*! Gomory cuts obtained from the tableau, implemented by John Forrest  */
+  CT_GMI              =  2,  /*! Gomory cuts obtained from the tableau, implementation from Giacomo Nannicini focusing on safer cuts */
+  CT_RedSplit         =  3,  /*! Reduce and split cuts, implemented by Francois Margot */
+  CT_RedSplitG        =  4,  /*! Reduce and split cuts, implemented by Giacomo Nannicini */
+  CT_FlowCover        =  5,  /*! Flow cover cuts */
+  CT_MIR              =  6,  /*! Mixed-integer rounding cuts */
+  CT_TwoMIR           =  7,  /*! Two-phase Mixed-integer rounding cuts */
+  CT_LaTwoMIR         =  8,  /*! Lagrangean relaxation for two-phase Mixed-integer rounding cuts, as in CT_LaGomory */
+  CT_LiftAndProject   =  9,  /*! Lift and project cuts */
+  CT_ResidualCapacity = 10,  /*! Residual capacity cuts */
+  CT_ZeroHalf         = 11,  /*! Zero-half cuts */
+  CT_Clique           = 12,  /*! Clique cuts */
+  CT_OddWheel         = 13,  /*! Lifted odd-hole inequalities */
+  CT_KnapsackCover    = 14,  /*! Knapsack cover cuts */
 };
 
 /*! Double parameters
@@ -753,6 +762,35 @@ Cbc_getColUB(Cbc_Model *model, int colIdx);
 CBCSOLVERLIB_EXPORT int CBC_LINKAGE
 Cbc_isInteger(Cbc_Model *model, int i);
 
+/** @brief Computes vector of instance features
+  *
+  * This procedure computes a vector of instance features. This vector can be used in machine
+  * learning methods to predict the best parameter settings, for example.
+  * 
+  * @param model problem object 
+  * @param features vector of size Cbc_nFeatures() that will be filled with problem features
+  **/
+CBCSOLVERLIB_EXPORT void CBC_LINKAGE
+Cbc_computeFeatures(Cbc_Model *model, double *features);
+
+/** @brief Returns the number of instance features
+  *
+  * Returns the number of instance features that can be computed in function
+  * Cbc_computeFeatures.
+  **/
+CBCSOLVERLIB_EXPORT int CBC_LINKAGE
+Cbc_nFeatures();
+
+/** @brief Name of the i-th instance features
+  *
+  * This procedure returns the name of the i-th instance feature that can 
+  * be computed in Cbc_computeFeatures.
+  *
+  * @param model problem object 
+  **/
+ CBCSOLVERLIB_EXPORT const char * CBC_LINKAGE
+ Cbc_featureName(int i);
+
 /** @brief Returns the conflict graph of the model
  *
  * Returns the conflict graph of the model, if it returns NULL or 
@@ -788,6 +826,16 @@ Cbc_readMps(Cbc_Model *model, const char *filename);
 CBCSOLVERLIB_EXPORT int CBC_LINKAGE
 Cbc_readLp(Cbc_Model *model, const char *filename);
 
+/** @brief Read the optimal basis for the linear program
+  *
+  * @param model problem object
+  * @param fileName file name 
+  * @return returns -1 on file error, 0 if no values, 1 if values.
+  **/
+CBCSOLVERLIB_EXPORT int CBC_LINKAGE
+Cbc_readBasis(Cbc_Model *model, const char *filename);
+
+
 /** @brief Write an MPS file from the given filename 
   *
   * @param model problem object
@@ -803,6 +851,18 @@ Cbc_writeMps(Cbc_Model *model, const char *filename);
   **/
 CBCSOLVERLIB_EXPORT void CBC_LINKAGE
 Cbc_writeLp(Cbc_Model *model, const char *filename);
+
+/** @brief Saves the optimal basis for the linear program
+  *
+  * @param model problem object
+  * @param fileName file name 
+  * @param writeValues If writeValues = 1 writes values of structurals (and adds VALUES to end of NAME card), 0 otherwise
+  * @param formatType 0 - normal,   1 - extra accuracy,   2 - IEEE hex(later)
+  * @return non-zero on IO error
+  **/
+CBCSOLVERLIB_EXPORT int CBC_LINKAGE
+Cbc_writeBasis(Cbc_Model *model, const char *filename, char writeValues, int formatType);
+
 
 /** @brief If Cbc was built with gzip compressed files support
   *
@@ -865,6 +925,16 @@ Cbc_maxNameLength(Cbc_Model *model);
 CBCSOLVERLIB_EXPORT void CBC_LINKAGE
 Cbc_setParameter(Cbc_Model *model, const char *name, const char *value);
 
+/** Gets the current value of an integer parameter
+ *
+ * @param model problem object
+ * @param which which integer parameter
+ * @return parameter value
+ * 
+ **/
+CBCSOLVERLIB_EXPORT int CBC_LINKAGE
+Cbc_getIntParam(Cbc_Model *model, enum IntParam which);
+
 /** Sets an integer parameter
  *
  * @param model problem object
@@ -885,9 +955,15 @@ Cbc_setIntParam(Cbc_Model *model, enum IntParam which, const int val);
 CBCSOLVERLIB_EXPORT void CBC_LINKAGE
 Cbc_setDblParam(Cbc_Model *model, enum DblParam which, const double val);
 
-
-
-
+/** Gets the current value of a double parameter
+ *
+ * @param model problem object
+ * @param which which double parameter
+ * @return parameter value
+ * 
+ **/
+CBCSOLVERLIB_EXPORT double CBC_LINKAGE
+Cbc_getDblParam(Cbc_Model *model, enum DblParam which);
 
 /** @brief returns the allowable gap
  *
@@ -1072,7 +1148,7 @@ Cbc_solve(Cbc_Model *model);
   * @return execution status
   *   0  optimal 
   *   1  incomplete search (stopped on time, iterations)
-  *   2  unfeasible
+  *   2  infeasible
   *   3  unbounded
   **/
 CBCSOLVERLIB_EXPORT int CBC_LINKAGE
@@ -1563,6 +1639,18 @@ Osi_checkCGraph( void *osi );
 CBCSOLVERLIB_EXPORT const void * CBC_LINKAGE
 Osi_CGraph( void *osi );
 
+/** @brief Computes instance features (can be used for machine learning) */
+CBCSOLVERLIB_EXPORT void CBC_LINKAGE
+Osi_compute_features(void *solver, double *features);
+
+/** @brief Number of instance features available */
+CBCSOLVERLIB_EXPORT int CBC_LINKAGE
+Osi_n_features();
+
+/** @brief Name of feature i */
+CBCSOLVERLIB_EXPORT const char * CBC_LINKAGE
+Osi_feature_name(int i);
+
 /*@}*/
 
 /** \name Conflict Graph related routines */
@@ -1604,7 +1692,18 @@ CG_conflictingNodes(Cbc_Model *model, void *cgraph, size_t node);
 
 /** \name Cgl related routines */
 
-CBCSOLVERLIB_EXPORT void CBC_LINKAGE Cgl_generateCuts( void *osiClpSolver, enum CutType ct, void *oc, int strength );
+
+/** @brief Generates cutting planes of a given type
+     *
+     *  Generates cutting planes of a given type
+     *
+     *  @param cbcModel problem object
+     *  @param ct cut type
+     *  @param oc an OsiCuts object where cuts will be stored
+     *  @param depth current three depth, cuts may use this info to decide which strategy to use
+     *  @param pass cut pass number
+     * */
+CBCSOLVERLIB_EXPORT void CBC_LINKAGE Cbc_generateCuts( Cbc_Model *cbcModel, enum CutType ct, void *oc, int depth, int pass );
 
 /*@}*/
 
