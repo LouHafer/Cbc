@@ -17104,6 +17104,12 @@ $as_echo "no" >&6; }
     pkg_short_errors=""
   fi
 
+  # Check whether -static option of pkg-config should be used when requesting libs
+  pkg_static=
+  if test -n "$PKG_CONFIG" ; then
+    case "$LDFLAGS" in "-static" | "* -static*" ) pkg_static=--static ;; esac
+  fi
+
    if test -n "$PKG_CONFIG"; then
   COIN_HAS_PKGCONFIG_TRUE=
   COIN_HAS_PKGCONFIG_FALSE='#'
@@ -21672,7 +21678,7 @@ $as_echo "$as_me: FINALIZE_FLAGS for CbcLib:" >&6;}
 
       if test -n "${CBCLIB_PCFILES}" ; then
         temp_CFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --cflags ${CBCLIB_PCFILES}`
-        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs ${CBCLIB_PCFILES}`
+        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs $pkg_static ${CBCLIB_PCFILES}`
         CBCLIB_CFLAGS="$temp_CFLAGS ${CBCLIB_CFLAGS}"
         CBCLIB_LFLAGS="$temp_LFLAGS ${CBCLIB_LFLAGS}"
       fi
@@ -21721,7 +21727,7 @@ $as_echo "$as_me: FINALIZE_FLAGS for CbcSolverLib:" >&6;}
 
       if test -n "${CBCSOLVERLIB_PCFILES}" ; then
         temp_CFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --cflags ${CBCSOLVERLIB_PCFILES}`
-        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs ${CBCSOLVERLIB_PCFILES}`
+        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs $pkg_static ${CBCSOLVERLIB_PCFILES}`
         CBCSOLVERLIB_CFLAGS="$temp_CFLAGS ${CBCSOLVERLIB_CFLAGS}"
         CBCSOLVERLIB_LFLAGS="$temp_LFLAGS ${CBCSOLVERLIB_LFLAGS}"
       fi
@@ -21770,7 +21776,7 @@ $as_echo "$as_me: FINALIZE_FLAGS for CbcGeneric:" >&6;}
 
       if test -n "${CBCGENERIC_PCFILES}" ; then
         temp_CFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --cflags ${CBCGENERIC_PCFILES}`
-        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs ${CBCGENERIC_PCFILES}`
+        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs $pkg_static ${CBCGENERIC_PCFILES}`
         CBCGENERIC_CFLAGS="$temp_CFLAGS ${CBCGENERIC_CFLAGS}"
         CBCGENERIC_LFLAGS="$temp_LFLAGS ${CBCGENERIC_LFLAGS}"
       fi
@@ -21819,7 +21825,7 @@ $as_echo "$as_me: FINALIZE_FLAGS for OsiCbcLib:" >&6;}
 
       if test -n "${OSICBCLIB_PCFILES}" ; then
         temp_CFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --cflags ${OSICBCLIB_PCFILES}`
-        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs ${OSICBCLIB_PCFILES}`
+        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs $pkg_static ${OSICBCLIB_PCFILES}`
         OSICBCLIB_CFLAGS="$temp_CFLAGS ${OSICBCLIB_CFLAGS}"
         OSICBCLIB_LFLAGS="$temp_LFLAGS ${OSICBCLIB_LFLAGS}"
       fi
@@ -21868,7 +21874,7 @@ $as_echo "$as_me: FINALIZE_FLAGS for CbcUnitTest:" >&6;}
 
       if test -n "${CBCUNITTEST_PCFILES}" ; then
         temp_CFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --cflags ${CBCUNITTEST_PCFILES}`
-        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs ${CBCUNITTEST_PCFILES}`
+        temp_LFLAGS=`PKG_CONFIG_PATH="$COIN_PKG_CONFIG_PATH" $PKG_CONFIG --libs $pkg_static ${CBCUNITTEST_PCFILES}`
         CBCUNITTEST_CFLAGS="$temp_CFLAGS ${CBCUNITTEST_CFLAGS}"
         CBCUNITTEST_LFLAGS="$temp_LFLAGS ${CBCUNITTEST_LFLAGS}"
       fi
