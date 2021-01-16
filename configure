@@ -17213,7 +17213,7 @@ fi
         ;;
       * )
         coin_has_coinutils=yes
-                coinutils_lflags="$withval"
+        coinutils_lflags="$withval"
         ;;
     esac
   fi
@@ -17474,7 +17474,7 @@ fi
         ;;
       * )
         coin_has_osi=yes
-                osi_lflags="$withval"
+        osi_lflags="$withval"
         ;;
     esac
   fi
@@ -17735,7 +17735,7 @@ fi
         ;;
       * )
         coin_has_cgl=yes
-                cgl_lflags="$withval"
+        cgl_lflags="$withval"
         ;;
     esac
   fi
@@ -17996,7 +17996,7 @@ fi
         ;;
       * )
         coin_has_clp=yes
-                clp_lflags="$withval"
+        clp_lflags="$withval"
         ;;
     esac
   fi
@@ -18259,7 +18259,7 @@ fi
         ;;
       * )
         coin_has_osiclp=yes
-                osiclp_lflags="$withval"
+        osiclp_lflags="$withval"
         ;;
     esac
   fi
@@ -18669,7 +18669,7 @@ fi
         ;;
       * )
         coin_has_asl=yes
-                asl_lflags="$withval"
+        asl_lflags="$withval"
         ;;
     esac
   fi
@@ -18910,7 +18910,7 @@ fi
         ;;
       * )
         coin_has_nauty=yes
-                nauty_lflags="$withval"
+        nauty_lflags="$withval"
         ;;
     esac
   fi
@@ -19154,7 +19154,7 @@ fi
         ;;
       * )
         coin_has_ositests=yes
-                ositests_lflags="$withval"
+        ositests_lflags="$withval"
         ;;
     esac
   fi
@@ -19382,7 +19382,7 @@ fi
         ;;
       * )
         coin_has_sample=yes
-                sample_data="$withval"
+        sample_data="$withval"
         ;;
     esac
   fi
@@ -19595,7 +19595,7 @@ fi
         ;;
       * )
         coin_has_netlib=yes
-                netlib_data="$withval"
+        netlib_data="$withval"
         ;;
     esac
   fi
@@ -19808,7 +19808,7 @@ fi
         ;;
       * )
         coin_has_miplib3=yes
-                miplib3_data="$withval"
+        miplib3_data="$withval"
         ;;
     esac
   fi
@@ -20039,7 +20039,7 @@ fi
         ;;
       * )
         coin_has_osidylp=yes
-                osidylp_lflags="$withval"
+        osidylp_lflags="$withval"
         ;;
     esac
   fi
@@ -20287,7 +20287,7 @@ fi
         ;;
       * )
         coin_has_osicpx=yes
-                osicpx_lflags="$withval"
+        osicpx_lflags="$withval"
         ;;
     esac
   fi
@@ -20535,7 +20535,7 @@ fi
         ;;
       * )
         coin_has_osiglpk=yes
-                osiglpk_lflags="$withval"
+        osiglpk_lflags="$withval"
         ;;
     esac
   fi
@@ -20778,7 +20778,7 @@ fi
         ;;
       * )
         coin_has_osimsk=yes
-                osimsk_lflags="$withval"
+        osimsk_lflags="$withval"
         ;;
     esac
   fi
@@ -21020,7 +21020,7 @@ fi
         ;;
       * )
         coin_has_osispx=yes
-                osispx_lflags="$withval"
+        osispx_lflags="$withval"
         ;;
     esac
   fi
@@ -21187,15 +21187,15 @@ $as_echo "#define CBC_HAS_OSISPX 1" >>confdefs.h
 #AC_COIN_CHK_PKG(OsiXpr,,[osi-xpress])
 
 
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for package Cplex with function CPXgetstat" >&5
-$as_echo_n "checking for package Cplex with function CPXgetstat... " >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for package Cplex with link check" >&5
+$as_echo_n "checking for package Cplex with link check... " >&6; }
 
 
 
 
 
-  # Check to see if the user has overridden configure parameters from the
-  # environment.
+
+
   coin_has_cplex=noInfo
   if test x"$COIN_SKIP_PROJECTS" != x ; then
     for pkg in $COIN_SKIP_PROJECTS ; do
@@ -21204,6 +21204,7 @@ $as_echo_n "checking for package Cplex with function CPXgetstat... " >&6; }
       fi
     done
   fi
+
 
   if test "$coin_has_cplex" != skipping ; then
 
@@ -21233,147 +21234,97 @@ fi
 
 
 
-  dflt_action=yes
 
-  # Initialize variables for the primary library.
-  coin_has_cplex=noInfo
-  cplex_lflags=
-  cplex_cflags=
-  cplex_data=
+  cplex_lflags="-lcplex -lpthread -lm -ldl"
+  cplex_cflags=""
+  cplex_data=""
+  coin_has_cplex=requested
 
-  # --with-prim is always present.
+
   withval="$with_cplex"
   if test -n "$withval" ; then
     case "$withval" in
       no )
         coin_has_cplex=skipping
+	cplex_failmode='command line'
         ;;
       yes )
         coin_has_cplex=requested
-        ;;
-      build )
-        coin_has_cplex=build
+	cplex_failmode=''
         ;;
       * )
-        coin_has_cplex=yes
+        coin_has_cplex=requested
+	cplex_failmode=''
         cplex_lflags="$withval"
         ;;
     esac
+  else
+    if test -n "$with_cplex_lflags" ||
+       test -n "$with_cplex_cflags" ||
+       test -n "$with_cplex_data" ; then
+      coin_has_cplex=requested
+      cplex_failmode=''
+    fi
   fi
 
-  # --with-prim-lflags and --with-prim-cflags are present
-     # Specifying --with-prim=no overrides the individual options for lflags and cflags.
-     if test "$coin_has_cplex" != skipping ; then
+
+  if test "$coin_has_cplex" != skipping ; then
        withval="$with_cplex_lflags"
        if test -n "$withval" ; then
-         case "$withval" in
-           build | no | yes )
-             as_fn_error $? "\"$withval\" is not valid here; please specify linker flags appropriate for your environment." "$LINENO" 5
-             ;;
-           * )
-             coin_has_cplex=yes
-             cplex_lflags="$withval"
-             ;;
-         esac
+	 coin_has_cplex=requested
+	 cplex_lflags="$withval"
        fi
 
        withval="$with_cplex_cflags"
        if test -n "$withval" ; then
-         case "$withval" in
-           build | no | yes )
-             as_fn_error $? "\"$withval\" is not valid here; please specify compiler flags appropriate for your environment." "$LINENO" 5
-             ;;
-           * )
-             coin_has_cplex=yes
-             cplex_cflags="$withval"
-             ;;
-         esac
+	 coin_has_cplex=requested
+	 cplex_cflags="$withval"
        fi
      fi
 
 
 
-  # At this point, coin_has_prim can be one of
-  # - noInfo (no user options specified),
-  # - skipping (user said no),
-  # - requested,
-  # - build (user said yes or build and gave no further guidance), or
-  # - yes (user specified one or more --with-prim options).
-  # If we're already at yes or skipping, we're done looking.
 
-  # If there are no user options (noInfo) and the default is no, we're skipping.
-  # Otherwise, the default must be yes or build; consider the package requested.
-  # A default action we don't recognise defaults to yes.
-  if test "$coin_has_cplex" = noInfo ; then
-    case $dflt_action in
-      no )
-        coin_has_cplex=skipping
-        ;;
-      build )
-        coin_has_cplex=build
-        ;;
-      * )
-        coin_has_cplex=requested
-        ;;
-    esac
-  fi
 
-  # Now coin_has_prim can be one of skipping, yes, build, or requested.
-  # For build or requested, use the parameter values or invent some.
-  case $coin_has_cplex in
-    build | requested)
-      cplex_lflags="-lcplex -lpthread -lm -ldl"
-         if test "$coin_has_cplex" = build ; then
-              cplex_cflags="-I\$(pkgincludedir)/ThirdParty"
-            fi
 
-      coin_has_cplex=yes
-      ;;
-    skipping | yes )
-      ;;
-    * )
-      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Unexpected status \"$coin_has_cplex\" in COIN_FIND_PRIM_LIB" >&5
-$as_echo "$as_me: WARNING: Unexpected status \"$coin_has_cplex\" in COIN_FIND_PRIM_LIB" >&2;}
-      ;;
-  esac
 
-  # At this point, coin_has_prim is yes or skipping.
-  if test $coin_has_cplex != skipping ; then
-       # Time to run a link check since we have a function name.
-       # Use whatever we've collected for lflags, plus other libraries ().
+
+
+  if test "$coin_has_cplex" != skipping ; then
        ac_save_LIBS=$LIBS
-       LIBS="$cplex_lflags "
+       ac_save_CPPFLAGS=$CPPFLAGS
+       LIBS="$cplex_lflags"
+       CPPFLAGS="$cplex_cflags"
        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
 #ifdef __cplusplus
-extern "C"
+  extern "C"
 #endif
-char CPXgetstat ();
-int
-main ()
-{
-return CPXgetstat ();
-  ;
-  return 0;
-}
+  void CPXgetstat() ;
+  int main () { CPXgetstat() ; return (0) ; }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
 
 else
-  coin_has_cplex=no
+  coin_has_cplex='no'
+	     if test -n "$cplex_failmode" ; then
+	       cplex_failmode="$cplex_failmode, bare link"
+	     else
+	       cplex_failmode="bare link"
+	     fi
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
        LIBS=$ac_save_LIBS
+       CPPFLAGS=$ac_save_CPPFLAGS
      fi
 
-  # The final value of coin_has_prim will be yes, no, or skipping. No means that
-  # the link check failed. Yes means that we passed the link check, or no link
-  # check was performed. Skipping means the user said `don't use.'
+
+  if test $coin_has_cplex = requested ; then
+    coin_has_cplex=yes
+  fi
+
 
   # Define BUILDTOOLS_DEBUG to enable debugging output
   if test "$BUILDTOOLS_DEBUG" = 1 ; then
@@ -21391,18 +21342,34 @@ $as_echo "$as_me: cplex_data is \"$cplex_data\"" >&6;}
 $as_echo "$as_me: cplex_pcfiles is \"$cplex_pcfiles\"" >&6;}
   fi
 
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_cplex" >&5
+    if test -n "$cplex_failmode" ; then
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_cplex ($cplex_failmode)" >&5
+$as_echo "$coin_has_cplex ($cplex_failmode)" >&6; }
+    else
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_cplex" >&5
 $as_echo "$coin_has_cplex" >&6; }
+    fi
   else
-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_cplex due to COIN_SKIP_PROJECTS" >&5
-$as_echo "$coin_has_cplex due to COIN_SKIP_PROJECTS" >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_cplex (COIN_SKIP_PROJECTS)" >&5
+$as_echo "$coin_has_cplex (COIN_SKIP_PROJECTS)" >&6; }
   fi
 
-  # Possibilities are `yes', `no', or `skipping'. Normalise to `yes' or `no'.
+  if test "$coin_has_cplex" = "no" ; then
+    if expr "$cplex_failmode" : '.*header.*' &>/dev/null ; then
+      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Compiler flags are \"$cplex_cflags\". Check that they are correct. You can supply correct values using --with-cplex-cflags." >&5
+$as_echo "$as_me: WARNING: Compiler flags are \"$cplex_cflags\". Check that they are correct. You can supply correct values using --with-cplex-cflags." >&2;}
+    fi
+    if expr "$cplex_failmode" : '.*link.*' &>/dev/null ; then
+      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Linker flags are \"$cplex_lflags\". Check that they are correct. You can supply correct values using --with-cplex-lflags." >&5
+$as_echo "$as_me: WARNING: Linker flags are \"$cplex_lflags\". Check that they are correct. You can supply correct values using --with-cplex-lflags." >&2;}
+    fi
+  fi
+
+
   if test "$coin_has_cplex" != yes ; then
     coin_has_cplex=no
   fi
+
 
    if test $coin_has_cplex = yes; then
   COIN_HAS_CPLEX_TRUE=
@@ -21413,8 +21380,7 @@ else
 fi
 
 
-  # If we've located the package, define preprocessor symbol COIN_HAS_PRIM
-  # and augment the necessary variables for the client packages.
+
   if test $coin_has_cplex = yes ; then
 
 $as_echo "#define CBC_HAS_CPLEX 1" >>confdefs.h
@@ -21424,7 +21390,10 @@ $as_echo "#define CBC_HAS_CPLEX 1" >>confdefs.h
 
 
 
+
   fi
+
+
 
 
 
@@ -21501,7 +21470,7 @@ fi
         ;;
       * )
         coin_has_glpk=yes
-                glpk_lflags="$withval"
+        glpk_lflags="$withval"
         ;;
     esac
   fi
@@ -21993,15 +21962,15 @@ if test "$enable_cbc_parallel" != no; then
   case "$CXX" in
   *cl) # Windows / cl: look for pthreadsw32 lib
 
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for package pthreadsw32 with function pthread_create" >&5
-$as_echo_n "checking for package pthreadsw32 with function pthread_create... " >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for package pthreadsw32 with link check" >&5
+$as_echo_n "checking for package pthreadsw32 with link check... " >&6; }
 
 
 
 
 
-  # Check to see if the user has overridden configure parameters from the
-  # environment.
+
+
   coin_has_pthreadsw32=noInfo
   if test x"$COIN_SKIP_PROJECTS" != x ; then
     for pkg in $COIN_SKIP_PROJECTS ; do
@@ -22010,6 +21979,7 @@ $as_echo_n "checking for package pthreadsw32 with function pthread_create... " >
       fi
     done
   fi
+
 
   if test "$coin_has_pthreadsw32" != skipping ; then
 
@@ -22039,147 +22009,97 @@ fi
 
 
 
-  dflt_action=yes
 
-  # Initialize variables for the primary library.
-  coin_has_pthreadsw32=noInfo
-  pthreadsw32_lflags=
-  pthreadsw32_cflags=
-  pthreadsw32_data=
+  pthreadsw32_lflags="pthreadVCE2.lib"
+  pthreadsw32_cflags=""
+  pthreadsw32_data=""
+  coin_has_pthreadsw32=requested
 
-  # --with-prim is always present.
+
   withval="$with_pthreadsw32"
   if test -n "$withval" ; then
     case "$withval" in
       no )
         coin_has_pthreadsw32=skipping
+	pthreadsw32_failmode='command line'
         ;;
       yes )
         coin_has_pthreadsw32=requested
-        ;;
-      build )
-        coin_has_pthreadsw32=build
+	pthreadsw32_failmode=''
         ;;
       * )
-        coin_has_pthreadsw32=yes
+        coin_has_pthreadsw32=requested
+	pthreadsw32_failmode=''
         pthreadsw32_lflags="$withval"
         ;;
     esac
+  else
+    if test -n "$with_pthreadsw32_lflags" ||
+       test -n "$with_pthreadsw32_cflags" ||
+       test -n "$with_pthreadsw32_data" ; then
+      coin_has_pthreadsw32=requested
+      pthreadsw32_failmode=''
+    fi
   fi
 
-  # --with-prim-lflags and --with-prim-cflags are present
-     # Specifying --with-prim=no overrides the individual options for lflags and cflags.
-     if test "$coin_has_pthreadsw32" != skipping ; then
+
+  if test "$coin_has_pthreadsw32" != skipping ; then
        withval="$with_pthreadsw32_lflags"
        if test -n "$withval" ; then
-         case "$withval" in
-           build | no | yes )
-             as_fn_error $? "\"$withval\" is not valid here; please specify linker flags appropriate for your environment." "$LINENO" 5
-             ;;
-           * )
-             coin_has_pthreadsw32=yes
-             pthreadsw32_lflags="$withval"
-             ;;
-         esac
+	 coin_has_pthreadsw32=requested
+	 pthreadsw32_lflags="$withval"
        fi
 
        withval="$with_pthreadsw32_cflags"
        if test -n "$withval" ; then
-         case "$withval" in
-           build | no | yes )
-             as_fn_error $? "\"$withval\" is not valid here; please specify compiler flags appropriate for your environment." "$LINENO" 5
-             ;;
-           * )
-             coin_has_pthreadsw32=yes
-             pthreadsw32_cflags="$withval"
-             ;;
-         esac
+	 coin_has_pthreadsw32=requested
+	 pthreadsw32_cflags="$withval"
        fi
      fi
 
 
 
-  # At this point, coin_has_prim can be one of
-  # - noInfo (no user options specified),
-  # - skipping (user said no),
-  # - requested,
-  # - build (user said yes or build and gave no further guidance), or
-  # - yes (user specified one or more --with-prim options).
-  # If we're already at yes or skipping, we're done looking.
 
-  # If there are no user options (noInfo) and the default is no, we're skipping.
-  # Otherwise, the default must be yes or build; consider the package requested.
-  # A default action we don't recognise defaults to yes.
-  if test "$coin_has_pthreadsw32" = noInfo ; then
-    case $dflt_action in
-      no )
-        coin_has_pthreadsw32=skipping
-        ;;
-      build )
-        coin_has_pthreadsw32=build
-        ;;
-      * )
-        coin_has_pthreadsw32=requested
-        ;;
-    esac
-  fi
 
-  # Now coin_has_prim can be one of skipping, yes, build, or requested.
-  # For build or requested, use the parameter values or invent some.
-  case $coin_has_pthreadsw32 in
-    build | requested)
-      pthreadsw32_lflags="pthreadVCE2.lib"
-         if test "$coin_has_pthreadsw32" = build ; then
-              pthreadsw32_cflags="-I\$(pkgincludedir)/ThirdParty"
-            fi
 
-      coin_has_pthreadsw32=yes
-      ;;
-    skipping | yes )
-      ;;
-    * )
-      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Unexpected status \"$coin_has_pthreadsw32\" in COIN_FIND_PRIM_LIB" >&5
-$as_echo "$as_me: WARNING: Unexpected status \"$coin_has_pthreadsw32\" in COIN_FIND_PRIM_LIB" >&2;}
-      ;;
-  esac
 
-  # At this point, coin_has_prim is yes or skipping.
-  if test $coin_has_pthreadsw32 != skipping ; then
-       # Time to run a link check since we have a function name.
-       # Use whatever we've collected for lflags, plus other libraries ().
+
+
+  if test "$coin_has_pthreadsw32" != skipping ; then
        ac_save_LIBS=$LIBS
-       LIBS="$pthreadsw32_lflags "
+       ac_save_CPPFLAGS=$CPPFLAGS
+       LIBS="$pthreadsw32_lflags"
+       CPPFLAGS="$pthreadsw32_cflags"
        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
 #ifdef __cplusplus
-extern "C"
+  extern "C"
 #endif
-char pthread_create ();
-int
-main ()
-{
-return pthread_create ();
-  ;
-  return 0;
-}
+  void pthread_create() ;
+  int main () { pthread_create() ; return (0) ; }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
 
 else
-  coin_has_pthreadsw32=no
+  coin_has_pthreadsw32='no'
+	     if test -n "$pthreadsw32_failmode" ; then
+	       pthreadsw32_failmode="$pthreadsw32_failmode, bare link"
+	     else
+	       pthreadsw32_failmode="bare link"
+	     fi
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
        LIBS=$ac_save_LIBS
+       CPPFLAGS=$ac_save_CPPFLAGS
      fi
 
-  # The final value of coin_has_prim will be yes, no, or skipping. No means that
-  # the link check failed. Yes means that we passed the link check, or no link
-  # check was performed. Skipping means the user said `don't use.'
+
+  if test $coin_has_pthreadsw32 = requested ; then
+    coin_has_pthreadsw32=yes
+  fi
+
 
   # Define BUILDTOOLS_DEBUG to enable debugging output
   if test "$BUILDTOOLS_DEBUG" = 1 ; then
@@ -22197,18 +22117,34 @@ $as_echo "$as_me: pthreadsw32_data is \"$pthreadsw32_data\"" >&6;}
 $as_echo "$as_me: pthreadsw32_pcfiles is \"$pthreadsw32_pcfiles\"" >&6;}
   fi
 
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_pthreadsw32" >&5
+    if test -n "$pthreadsw32_failmode" ; then
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_pthreadsw32 ($pthreadsw32_failmode)" >&5
+$as_echo "$coin_has_pthreadsw32 ($pthreadsw32_failmode)" >&6; }
+    else
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_pthreadsw32" >&5
 $as_echo "$coin_has_pthreadsw32" >&6; }
+    fi
   else
-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_pthreadsw32 due to COIN_SKIP_PROJECTS" >&5
-$as_echo "$coin_has_pthreadsw32 due to COIN_SKIP_PROJECTS" >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $coin_has_pthreadsw32 (COIN_SKIP_PROJECTS)" >&5
+$as_echo "$coin_has_pthreadsw32 (COIN_SKIP_PROJECTS)" >&6; }
   fi
 
-  # Possibilities are `yes', `no', or `skipping'. Normalise to `yes' or `no'.
+  if test "$coin_has_pthreadsw32" = "no" ; then
+    if expr "$pthreadsw32_failmode" : '.*header.*' &>/dev/null ; then
+      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Compiler flags are \"$pthreadsw32_cflags\". Check that they are correct. You can supply correct values using --with-pthreadsw32-cflags." >&5
+$as_echo "$as_me: WARNING: Compiler flags are \"$pthreadsw32_cflags\". Check that they are correct. You can supply correct values using --with-pthreadsw32-cflags." >&2;}
+    fi
+    if expr "$pthreadsw32_failmode" : '.*link.*' &>/dev/null ; then
+      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Linker flags are \"$pthreadsw32_lflags\". Check that they are correct. You can supply correct values using --with-pthreadsw32-lflags." >&5
+$as_echo "$as_me: WARNING: Linker flags are \"$pthreadsw32_lflags\". Check that they are correct. You can supply correct values using --with-pthreadsw32-lflags." >&2;}
+    fi
+  fi
+
+
   if test "$coin_has_pthreadsw32" != yes ; then
     coin_has_pthreadsw32=no
   fi
+
 
    if test $coin_has_pthreadsw32 = yes; then
   COIN_HAS_PTHREADSW32_TRUE=
@@ -22219,8 +22155,7 @@ else
 fi
 
 
-  # If we've located the package, define preprocessor symbol COIN_HAS_PRIM
-  # and augment the necessary variables for the client packages.
+
   if test $coin_has_pthreadsw32 = yes ; then
 
 $as_echo "#define CBC_HAS_PTHREADSW32 1" >>confdefs.h
@@ -22230,7 +22165,10 @@ $as_echo "#define CBC_HAS_PTHREADSW32 1" >>confdefs.h
 
 
 
+
   fi
+
+
 
     if test "$coin_has_pthreadsw32" = yes ; then
       enable_cbc_parallel=yes
