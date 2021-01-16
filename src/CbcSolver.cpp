@@ -230,8 +230,7 @@ static int initialPumpTune = -1;
 #include "CglLandP.hpp"
 #include "CglResidualCapacity.hpp"
 #include "CglZeroHalf.hpp"
-//#define CGL_WRITEMPS
-#ifdef CGL_WRITEMPS
+#if DEBUG_PREPROCESS >1
 extern double *debugSolution;
 extern int debugNumberColumns;
 #endif
@@ -4199,7 +4198,10 @@ int CbcMain1(int argc, const char *argv[],
 		      generator1.setMaxElements(1000);
 #endif
                     generator1.setMaxProbeRoot(saveSolver->getNumCols());
-                    generator1.setMaxLookRoot(saveSolver->getNumCols());
+ 		    if ((tune2 & 512) != 0) 
+		      generator1.setMaxLookRoot(CoinMin(saveSolver->getNumCols(),1000));
+		    else
+		      generator1.setMaxLookRoot(CoinMin(saveSolver->getNumCols(),400));
                   }
                   if ((babModel_->specialOptions() & 65536) != 0)
                     process.setOptions(1);
@@ -4525,7 +4527,7 @@ int CbcMain1(int argc, const char *argv[],
                     if ((model_.specialOptions() & 16777216) != 0 && model_.getCutoff() > 1.0e30) {
                       osiclp->getModelPtr()->setMoreSpecialOptions(saveOptions | 262144);
                     }
-#ifdef CGL_WRITEMPS
+#if DEBUG_PREPROCESS > 1
                     if (debugValues) {
                       process.setApplicationData(const_cast< double * >(debugValues));
                     }
@@ -5890,6 +5892,7 @@ int CbcMain1(int argc, const char *argv[],
                   babModel_->solver()->activateRowCutDebugger(debugValues);
                 } else {
                   int numberOriginalColumns = process.originalModel()->getNumCols();
+#if DEBUG_PREPROCESS < 2
                   if (numberDebugValues <= numberOriginalColumns) {
                     const int *originalColumns = process.originalColumns();
                     double *newValues = new double[numberColumns];
@@ -5925,6 +5928,10 @@ int CbcMain1(int argc, const char *argv[],
                   } else {
                     printf("debug file has incorrect number of columns\n");
                   }
+#else
+		  // for debug
+		  babModel_->solver()->activateRowCutDebugger(debugSolution);
+#endif
                 }
               }
               babModel_->setCutoffIncrement(CoinMax(babModel_->getCutoffIncrement(), increment));
@@ -9526,7 +9533,7 @@ int CbcMain1(int argc, const char *argv[],
                 if (nRead != static_cast< size_t >(numberDebugValues))
                   throw("Error in fread");
                 printf("%d doubles read into debugValues\n", numberDebugValues);
-#ifdef CGL_WRITEMPS
+#if DEBUG_PREPROCESS > 1
                 debugSolution = debugValues;
                 debugNumberColumns = numberDebugValues;
 #endif
