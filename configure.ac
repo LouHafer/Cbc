@@ -105,7 +105,7 @@ AC_COIN_CHK_PKG(OsiSpx,[CbcGeneric OsiCbcLib],[osi-soplex])
 #AC_COIN_CHK_PKG(OsiXpr,,[osi-xpress])
 
 AC_COIN_CHK_LIB(Cplex,[CbcLib],[-lcplex -lpthread -lm -ldl],[],[],[CPXgetstat])
-AC_COIN_CHK_PKG(Glpk,[CbcSolverLib],,[build])
+AC_COIN_CHK_PKG(Glpk,[CbcSolverLib],,[default_build])
 
 #############################################################################
 #                       CbcGeneric configuration                            #
