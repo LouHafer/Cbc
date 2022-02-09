@@ -128,7 +128,7 @@ public:
 
     /** Maximum number of nodes without improving the best feasible
      *  solution (just checked if a feasible solution was already found ) */
-    CbcMaxNodesNotImprovingFeasSol,
+    CbcMaxNodesNotImproving,
     /** Just a marker, so that a static sized array can store parameters. */
     CbcLastIntParam
   };
@@ -197,7 +197,7 @@ public:
     CbcSmallChange,
     /** \brief Maximum time without improving the best solution found, checked only if a
      * feasible solution is already available */
-    CbcMaximumSecondsNotImprovingFeasSol,
+    CbcMaxSecondsNotImproving,
     /** Just a marker, so that a static sized array can store parameters. */
     CbcLastDblParam
   };
@@ -260,6 +260,8 @@ private:
     int &numberNodesOutput, int &status);
   /// Update size of whichGenerator
   void resizeWhichGenerator(int numberNow, int numberAfter);
+  /// One last go at cuts
+  int oneLastGoAtCuts(OsiCuts &cuts, int typeGo);
 
 public:
 #ifdef CBC_KEEP_DEPRECATED
@@ -641,6 +643,34 @@ public:
     return getIntParam(CbcMaxNumNode);
   }
 
+  /// Set the \link CbcModel::CbcMaxNodesNotImproving limit \endlink
+  inline bool setMaxNodesNotImproving(int value) {
+    return setIntParam(CbcMaxNodesNotImproving, value);
+  }
+
+  /// Get the \link CbcModel::CbcMaxNodesNotImproving limit \endlink
+  inline int getMaxNodesNotImproving() const {
+    return getIntParam(CbcMaxNodesNotImproving);
+  }
+
+  /// Set the \link CbcModel::CbcMaxSecondsNotImproving limit \endlink
+  inline bool setMaxSecondsNotImproving(double value) {
+    return setDblParam(CbcMaxSecondsNotImproving, value);
+  }
+
+  /// Get the \link CbcModel::CbcMaxSecondsNotImproving limit \endlink
+  inline double getMaxSecondsNotImproving() const {
+    return getDblParam(CbcMaxSecondsNotImproving);
+  }
+
+  /// Set the \link CbcModel::CbcMaxSolutions limit \endlink
+  inline bool setMaxSolutions(int value) {
+    return setIntParam(CbcMaxNumSol, value);
+  }
+
+  /// Get the \link CbcModel::CbcMaxSolutions limit \endlink
+  inline int getMaxSolution() const { return getIntParam(CbcMaxNumSol); }
+
   /// If integer variables should be rounded before saving a solution.
   //  For some problems with integer and continuous variables, rounding can
   //  increase the infeasibilities, but it can make sense if all variables
@@ -696,6 +726,10 @@ public:
 
   /// Return true if maximum time reached
   bool maximumSecondsReached() const;
+
+  /// Get last time when a better feasible solution was found
+  inline double lastTimeImprovingFeasSol() const
+  { return lastTimeImprovingFeasSol_;};
 
   /** Set the
       \link CbcModel::CbcIntegerTolerance integrality tolerance \endlink
@@ -1859,6 +1893,10 @@ public:
   {
     parentModel_ = &parentModel;
   }
+  /// See if in sub tree
+  inline bool inSmallBranchAndBound() const {
+    return (specialOptions_ & 2048) != 0 && parentModel_;
+  }
   //@}
 
   /** \name Heuristics and priorities */
@@ -2150,6 +2188,11 @@ public:
  	20 bit 1048576 - use ranging in CbcNode
 	21 bit 2097152 - analyze changed priorities but were equal before
 	22 bit 4194304 - ignore cutoff increment in multiple root solvers
+	23 bit (8388608) - no crunch
+	25 bit 33554432 - also 26,27 lagrangean cuts
+	28 bit 268435456 - alternative lagrangean cuts
+	29 bit 536870912 - one shot of less useful cuts
+	30 bit (1073741824) - Just make orbital into global cuts
     */
   inline void setMoreSpecialOptions2(int value)
   {
@@ -2901,10 +2944,11 @@ private:
   int numberNodes_;
   /// Last node where a better feasible solution was found
   int lastNodeImprovingFeasSol_;
+  /// Last time when a better feasible solution was found
+  double lastTimeImprovingFeasSol_;
   /** Cumulative number of nodes for statistics.
         Must fix to match up
     */
-  double lastTimeImprovingFeasSol_;
   int numberNodes2_;
   /// Cumulative number of iterations
   int numberIterations_;
@@ -3052,6 +3096,16 @@ private:
 	9 bit (512) - branching on objective (later)
 	10 bit (1024) - branching on constraints (later)
 	11/12 bit 2048 - intermittent cuts
+	13/14 bit 8192 - go to bitter end in strong branching (first time)
+	15 bit 32768 - take care of very very small values for Integer/SOS variables
+	16 bit 65536 - lazy constraints
+        17 bit 131072 - fairly simple orbital 
+        18 bit 262144 - some statistics for fairly simple orbital 
+ 	19 bit 524288 - freeze problem at root cuts
+ 	20 bit 1048576 - use ranging in CbcNode
+	21 bit 2097152 - analyze changed priorities but were equal before
+	22 bit 4194304 - ignore cutoff increment in multiple root solvers
+	23 bit (8388608) - no crunch
     */
   int moreSpecialOptions2_;
   /// User node comparison function

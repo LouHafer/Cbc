@@ -18,12 +18,6 @@ if COIN_HAS_CLP
   CBC_TEST_TGTS += test_cbc ctests
 endif
 
-if CBC_BUILD_CBC_GENERIC
-if COIN_HAS_SAMPLE
-  CBC_TEST_TGTS += test_cbc_generic
-endif
-endif
-
 cbcflags =
 ositestsflags =
 if COIN_HAS_SAMPLE
@@ -59,7 +53,7 @@ gamstests: gamsTest$(EXEEXT)
 bin_PROGRAMS = gamsTest osiUnitTest CInterfaceTest
 
 gamsTest_SOURCES = gamsTest.cpp
-gamsTest_LDADD = ../src/libCbcSolver.la ../src/libCbc.la
+gamsTest_LDADD = ../src/libCbc.la
 
 ########################################################################
 #                         unitTest for OsiCbc                          #
@@ -79,7 +73,7 @@ ositests: osiUnitTest$(EXEEXT)
 CInterfaceTest_SOURCES = CInterfaceTest.c
 nodist_EXTRA_CInterfaceTest_SOURCES = dummy.cpp # force using C++ linker
 
-CInterfaceTest_LDADD = ../src/libCbcSolver.la ../src/libCbc.la
+CInterfaceTest_LDADD = ../src/libCbc.la
 
 ctests: CInterfaceTest$(EXEEXT)
 	export RUNNING_TEST="CInterfaceTest" ; ./CInterfaceTest$(EXEEXT) $(MIPLIB3_DATA) $(SAMPLE_DATA)

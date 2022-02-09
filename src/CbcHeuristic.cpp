@@ -13,7 +13,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <cfloat>
-
+#define JJF_REDUCE_HEURISTICS
 //#define PRINT_DEBUG
 #ifdef CBC_HAS_CLP
 #include "OsiClpSolverInterface.hpp"
@@ -266,13 +266,16 @@ bool CbcHeuristic::shouldHeurRun(int whereFrom)
   if ((whereFrom_ & (1 << whereFrom)) == 0)
     return false;
     // No longer used for original purpose - so use for ever run at all JJF
-#ifndef JJF_ONE
+#ifndef JJF_REDUCE_HEURISTICS
   // Don't run if hot start or no rows!
   if (model_ && (model_->hotstartSolution() || !model_->getNumRows()))
     return false;
   else
     return true;
 #else
+  // Don't run if hot start or no rows!
+  if (!model_ || (model_->hotstartSolution() || !model_->getNumRows()))
+    return false;
 #ifdef JJF_ZERO
   const CbcNode *currentNode = model_->currentNode();
   if (currentNode == NULL) {
@@ -305,7 +308,7 @@ bool CbcHeuristic::shouldHeurRun(int whereFrom)
     }
     // LL: should we save these nodes in the list of nodes where the heur was
     // LL: run?
-#ifndef JJF_ONE
+#ifndef JJF_REDUCE_HEURISTICS
     if (currentNode != NULL) {
       // Get where we are and create the appropriate CbcHeuristicNode object
       CbcHeuristicNode *nodeDesc = new CbcHeuristicNode(*model_);
@@ -330,7 +333,7 @@ bool CbcHeuristic::shouldHeurRun(int whereFrom)
     // Get where we are and create the appropriate CbcHeuristicNode object
     CbcHeuristicNode *nodeDesc = new CbcHeuristicNode(*model_);
     //#ifdef PRINT_DEBUG
-#ifndef JJF_ONE
+#ifndef JJF_REDUCE_HEURISTICS
     const double minDistanceToRun = 1.5 * log((double)depth) / log((double)2);
 #else
     const double minDistanceToRun = minDistanceToRun_;
@@ -959,6 +962,10 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
 #endif
 #ifdef CBC_HAS_CLP
     OsiClpSolverInterface *clpSolver = dynamic_cast< OsiClpSolverInterface * >(solver);
+    if (clpSolver) {
+      clpSolver->getModelPtr()->cleanSolver();
+      clpSolver->getModelPtr()->setWhatsChanged(0);
+    }
     // See if SOS
     if (clpSolver && clpSolver->numberSOS()) {
       // SOS
@@ -1047,6 +1054,13 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
         if (debugger) {
           printf("On optimal path after preprocessing\n");
         }
+      }
+#endif
+#ifdef CBC_HAS_CLP
+      if (clpSolver) {
+        OsiClpSolverInterface *clpSolver2
+          = dynamic_cast< OsiClpSolverInterface * >(solver2);
+	clpSolver2->setSpecialOptions(clpSolver->specialOptions());
       }
 #endif
       if (returnCode == 1) {
@@ -2202,7 +2216,6 @@ int CbcRounding::solution(double &solutionValue,
     }
   }
 
-  double penalty = 0.0;
   // see if feasible - just using singletons
   for (i = 0; i < numberRows; i++) {
     double value = rowActivity[i];
@@ -2289,8 +2302,15 @@ int CbcRounding::solution(double &solutionValue,
         newSolutionValue += addCost;
         rowActivity[i] += changeRowActivity;
       }
-      penalty += fabs(thisInfeasibility);
     }
+  }
+  double penalty = 0.0;
+  // integer variables may have wandered
+  for (i = 0; i < numberIntegers; i++) {
+    int iColumn = integerVariable[i];
+    double value = newSolution[iColumn];
+    if (fabs(floor(value + 0.5) - value) > integerTolerance)
+      penalty += fabs(floor(value + 0.5) - value);
   }
   if (penalty) {
     // see if feasible using any

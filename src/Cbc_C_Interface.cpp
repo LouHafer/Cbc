@@ -10,6 +10,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <deque>
  
 #include "Cbc_C_Interface.h"
 
@@ -62,7 +63,6 @@
 
 using namespace std;
 
-static char **to_char_vec( const vector< string > &names );
 static void *xmalloc( const size_t size );
 static void *xrealloc( void *ptr, const size_t newSize );
 static void Cbc_updateSlack( Cbc_Model *model, const double *ractivity );
@@ -323,7 +323,8 @@ struct Cbc_Model {
     m->model_->solver()->prop(index, val);     \
   }
 
-const int VERBOSE = 0;
+//TODO Why is this here?
+//const int VERBOSE = 0;
 
 typedef std::map< std::string, int > NameIndex;
 
@@ -1274,7 +1275,7 @@ Cbc_writeMps(Cbc_Model *model, const char *filename)
   model->solver_->writeMps(filename, "mps", Cbc_getObjSense(model));
 }
 
-int Cbc_readBasis(Cbc_Model *model, const char *filename) {
+int CBC_LINKAGE Cbc_readBasis(Cbc_Model *model, const char *filename) {
   OsiClpSolverInterface *solver = model->solver_;
   ClpSimplex *clps = solver->getModelPtr();
   int status = clps->readBasis(filename);
@@ -1286,7 +1287,7 @@ int Cbc_readBasis(Cbc_Model *model, const char *filename) {
   return status;
 }
 
-int Cbc_writeBasis(Cbc_Model *model, const char *filename, char writeValues, int formatType) {
+int CBC_LINKAGE Cbc_writeBasis(Cbc_Model *model, const char *filename, char writeValues, int formatType) {
   OsiClpSolverInterface *solver = model->solver_;
   ClpSimplex *clps = solver->getModelPtr();
   return clps->writeBasis(filename, writeValues, formatType);
@@ -1448,7 +1449,7 @@ int CBC_LINKAGE Cbc_status(Cbc_Model *model) {
 }
 
 
-int Cbc_secondaryStatus(Cbc_Model *model) {
+int CBC_LINKAGE Cbc_secondaryStatus(Cbc_Model *model) {
   switch (model->lastOptimization) {
     case ModelNotOptimized:
       fprintf( stderr, "Status not available, model was not optimized yet.\n");
@@ -1465,16 +1466,16 @@ int Cbc_secondaryStatus(Cbc_Model *model) {
   return INT_MAX;
 }
 
-void Cbc_computeFeatures(Cbc_Model *model, double *features) {
+void CBC_LINKAGE Cbc_computeFeatures(Cbc_Model *model, double *features) {
   OsiFeatures::compute(features, model->solver_);
 }
 
-CBCSOLVERLIB_EXPORT int CBC_LINKAGE
+CBCLIB_EXPORT int CBC_LINKAGE
 Cbc_nFeatures() {
   return OsiFeatures::n;
 }
 
-const char *Cbc_featureName(int i) {
+const char * CBC_LINKAGE Cbc_featureName(int i) {
   return OsiFeatures::name(i);
 }
 
@@ -1493,7 +1494,7 @@ Cbc_getNumElements(Cbc_Model *model)
     tmpNZCols + tmpNZRows;
 }
 
-const void *Cbc_conflictGraph( Cbc_Model *model ) {
+const void * CBC_LINKAGE Cbc_conflictGraph( Cbc_Model *model ) {
   return model->solver_->getCGraph();
 }
 
@@ -1501,7 +1502,7 @@ const void *Cbc_conflictGraph( Cbc_Model *model ) {
  *
  * @param model problem object
  **/
-void Cbc_updateConflictGraph( Cbc_Model *model ) {
+void CBC_LINKAGE Cbc_updateConflictGraph( Cbc_Model *model ) {
   Cbc_flush(model);
   model->solver_->checkCGraph();
 }
@@ -1774,7 +1775,11 @@ Cbc_solveLinearProgram(Cbc_Model *model)
   if (model->lp_method == LPM_Auto) {
     ClpSimplexOther *clpo = static_cast<ClpSimplexOther *>(clps);
     assert(clpo);
-    char *opts = clpo->guess(0);
+    // Hacky for now
+    std::string opts_str(clpo->guess(0));
+    char opts[256];
+    assert (opts_str.length() <= 256);
+    strcpy(opts, opts_str.c_str());
 
     if (opts) {
       if (strstr(opts, "-primals") != NULL) {
@@ -1834,7 +1839,6 @@ Cbc_solveLinearProgram(Cbc_Model *model)
             //printf("Setting dual pivot to pesteep.\n");
           }
       } // dual pivot
-      delete[] opts;
     }
   } // auto
 
@@ -1860,6 +1864,10 @@ Cbc_solveLinearProgram(Cbc_Model *model)
       clpOptions.setSolveType( ClpSolve::useBarrier );
       clpOptions.setSpecialOption(4, 4);
       sprintf(methodName, "Barrier");
+      break;
+    case LPM_BarrierNoCross:
+      clpOptions.setSolveType( ClpSolve::useBarrierNoCross );
+      sprintf(methodName, "Barrier No Crossover");
       break;
   }
   solver->setSolveOptions(clpOptions);
@@ -1973,7 +1981,7 @@ void Cbc_updateSlack( Cbc_Model *model, const double *ractivity ) {
 }
 
 
-void Cbc_strengthenPacking(Cbc_Model *model) {
+void CBC_LINKAGE Cbc_strengthenPacking(Cbc_Model *model) {
   Cbc_flush(model);
   OsiClpSolverInterface *solver = model->solver_;
   CglCliqueStrengthening clqStr(solver);
@@ -1982,7 +1990,7 @@ void Cbc_strengthenPacking(Cbc_Model *model) {
   clqStr.strengthenCliques();
 }
 
-void 
+void CBC_LINKAGE 
 Cbc_strengthenPackingRows(Cbc_Model *model, size_t n, const size_t rows[])
 {
   Cbc_flush(model);
@@ -2254,9 +2262,9 @@ Cbc_solve(Cbc_Model *model)
         cbcModel.passInMessageHandler(cbcmh);
       }
 
-      CbcSolverUsefulData cbcData;
-      CbcMain0(cbcModel, cbcData);
-      cbcData.printWelcome_ = false;
+      CbcParameters parameters;
+      CbcMain0(cbcModel, parameters);
+      parameters.disableWelcomePrinting();
 
       // adds SOSs if any
       Cbc_addAllSOS(model, cbcModel);
@@ -2284,28 +2292,23 @@ Cbc_solve(Cbc_Model *model)
       cbcModel.setLogLevel( model->int_param[INT_PARAM_LOG_LEVEL] );
 
       // aditional parameters specified by user as strings
-      std::vector< string > argv;
-      argv.push_back("Cbc_C_Interface");
+      std::deque< string > inputQueue;
       for ( size_t i=0 ; i<model->vcbcOptions.size() ; ++i ) {
         string param = model->vcbcOptions[i];
         string val = model->cbcOptions[param];
         if (val.size()) {
           stringstream ss;
           ss << "-" << param << "=" << val;
-          argv.push_back(ss.str().c_str());
+          inputQueue.push_back(ss.str().c_str());
         } else {
           stringstream ss;
           ss << "-" << param;
-          argv.push_back(ss.str());
+          inputQueue.push_back(ss.str());
         }
       }
 
-      argv.push_back("-solve");
-      argv.push_back("-quit");
-
-      char **charCbcOpts = to_char_vec(argv);
-      const int nargs = (int) argv.size();
-      const char **args = (const char **)charCbcOpts;
+      inputQueue.push_back("-solve");
+      inputQueue.push_back("-quit");
 
       OsiBabSolver defaultC;
       if (model->cutCBAtSol) {
@@ -2331,11 +2334,9 @@ Cbc_solve(Cbc_Model *model)
       cbcModel.setRandomSeed(model->int_param[INT_PARAM_RANDOM_SEED]);
       cbcModel.setUseElapsedTime( (model->int_param[INT_PARAM_ELAPSED_TIME] == 1) );
 
-      CbcMain1( nargs, args, cbcModel, cbc_callb, cbcData );
+      CbcMain1(inputQueue, cbcModel, parameters, cbc_callb);
 
       Cbc_getMIPOptimizationResults( model, cbcModel );
-
-      free(charCbcOpts);
 
       if (cbc_eh)
         delete cbc_eh;
@@ -2709,7 +2710,7 @@ Cbc_getColSolution(Cbc_Model *model)
   * @param row row index
   * @return row upper bound
   **/
-double 
+double CBC_LINKAGE
 Cbc_getRowUB(Cbc_Model *model, int row) {
   if (row<model->solver_->getNumRows()) {
     return model->solver_->getRowUpper()[row];
@@ -2734,7 +2735,7 @@ double CBC_LINKAGE Cbc_getRowLB(Cbc_Model *model, int row) {
   }
 }
 
-char Cbc_checkFeasibility(Cbc_Model *model, const double x[],
+char CBC_LINKAGE Cbc_checkFeasibility(Cbc_Model *model, const double x[],
     double *maxViolRow, int *rowIdx, 
     double *maxViolCol, int *colIdx) {
   *maxViolRow = *maxViolCol = -1.0;
@@ -3056,7 +3057,7 @@ Cbc_getColUpper(Cbc_Model *model)
   return model->solver_->getColUpper();
 }
 
-double Cbc_getColObj(Cbc_Model *model, int colIdx) {
+double CBC_LINKAGE Cbc_getColObj(Cbc_Model *model, int colIdx) {
   VALIDATE_COL_INDEX(colIdx, model);
 
   if (colIdx < model->solver_->getNumCols()) {
@@ -3067,7 +3068,7 @@ double Cbc_getColObj(Cbc_Model *model, int colIdx) {
   }
 }
 
-double Cbc_getColLB(Cbc_Model *model, int colIdx) {
+double CBC_LINKAGE Cbc_getColLB(Cbc_Model *model, int colIdx) {
   VALIDATE_COL_INDEX(colIdx, model);
 
   if (colIdx < model->solver_->getNumCols()) {
@@ -3078,7 +3079,7 @@ double Cbc_getColLB(Cbc_Model *model, int colIdx) {
   }
 }
 
-double Cbc_getColUB(Cbc_Model *model, int colIdx) {
+double CBC_LINKAGE Cbc_getColUB(Cbc_Model *model, int colIdx) {
   VALIDATE_COL_INDEX(colIdx, model);
 
   if (colIdx < model->solver_->getNumCols()) {
@@ -3193,7 +3194,7 @@ Cbc_clone(Cbc_Model *model)
   Cbc_Model *result = new Cbc_Model();
 
   result->solver_ = new OsiClpSolverInterface(*model->solver_);
-  model->solver_->setIntParam(OsiNameDiscipline, 1);
+  result->solver_->setIntParam(OsiNameDiscipline, 1);
 
   result->relax_ = model->relax_;
 
@@ -3322,6 +3323,61 @@ Cbc_clone(Cbc_Model *model)
   }
 
   return result;
+}
+
+/* returns a copy of solver, without copying the current solution */
+OsiClpSolverInterface* Cbc_cloneSolver(OsiClpSolverInterface *solver) {
+  OsiClpSolverInterface *newSolver = new OsiClpSolverInterface();
+  
+  newSolver->setIntParam(OsiNameDiscipline, 1);
+  newSolver->loadProblem(*solver->getMatrixByCol(), solver->getColLower(), solver->getColUpper(),
+                         solver->getObjCoefficients(), solver->getRowLower(), solver->getRowUpper());
+
+  for (int i = 0; i < solver->getNumCols(); i++) {
+      newSolver->setColName(i, solver->getColName(i));
+
+      if (solver->isInteger(i)) {
+          newSolver->setInteger(i);
+      } else {
+          newSolver->setContinuous(i);
+      }
+  }
+
+  for (int i = 0; i < solver->getNumRows(); i++) {
+      newSolver->setRowName(i, solver->getRowName(i));
+  }
+
+  std::string probName;
+  solver->getStrParam(OsiProbName, probName);
+  newSolver->setStrParam(OsiProbName, probName);
+  
+  return newSolver;
+}
+
+
+/** Discards the current solution, putting the model to an unsolved state */
+void CBC_LINKAGE
+Cbc_reset(Cbc_Model *model)
+{
+  Cbc_flush(model);
+
+  OsiClpSolverInterface *newSolver = Cbc_cloneSolver(model->solver_);
+  delete model->solver_;
+  model->solver_ = newSolver;
+
+  model->lastOptimization = ModelNotOptimized;
+  Cbc_cleanOptResults(model);
+  
+  if (model->mipSavedSolution) {
+    delete model->mipSavedSolution;
+    delete model->mipSavedSolutionObj;
+    delete model->mipBestSolution;
+    delete model->mipRowActivity;
+    model->mipSavedSolution = NULL;
+    model->mipSavedSolutionObj = NULL;
+    model->mipBestSolution = NULL;
+    model->mipRowActivity = NULL;
+  }
 }
 
 /** Set this the variable to be continuous */
@@ -3574,7 +3630,7 @@ Cbc_deleteCols(Cbc_Model *model, int numCols, const int cols[])
 
 }
 
-Cbc_Column Cbc_getColumn(Cbc_Model *model, int colIdx ) {
+Cbc_Column CBC_LINKAGE Cbc_getColumn(Cbc_Model *model, int colIdx ) {
   Cbc_Column result;
 
   result.nz = Cbc_getColNz(model, colIdx);
@@ -3588,7 +3644,7 @@ Cbc_Column Cbc_getColumn(Cbc_Model *model, int colIdx ) {
 }
 
 
-Cbc_Row Cbc_getRow( Cbc_Model *model, int rowIdx ) {
+Cbc_Row CBC_LINKAGE Cbc_getRow( Cbc_Model *model, int rowIdx ) {
   Cbc_Row result;
 
   result.nz = Cbc_getRowNz( model, rowIdx );
@@ -3835,21 +3891,21 @@ Osi_getNumCols( void *osi )
 }
 
 /** @brief Computes instance features (can be used in machine learning methods) */
-void Osi_compute_features(void *solver, double *features) {
+void CBC_LINKAGE Osi_compute_features(void *solver, double *features) {
   OsiFeatures::compute(features, (OsiSolverInterface *) solver);
 }
 
 /** @brief Number of instance features available */
-int Osi_n_features() {
+int CBC_LINKAGE Osi_n_features() {
   return OsiFeatures::n;
 }
 
 /** @brief Name of feature i */
-const char *Osi_feature_name(int i);
+const char * CBC_LINKAGE Osi_feature_name(int i);
 
 
 /** @brief Creates (it not yet) the conflict graph  */
-void 
+void CBC_LINKAGE 
 Osi_checkCGraph( void *osi ) {
   OsiSolverInterface *solver = (OsiSolverInterface *)(osi);
   solver->checkCGraph();
@@ -3862,24 +3918,24 @@ Osi_CGraph( void *osi ) {
   return solver->getCGraph();
 }
 
-size_t CG_nodes( void *cgraph ) {
+size_t CBC_LINKAGE CG_nodes( void *cgraph ) {
   const CoinStaticConflictGraph *cg = (CoinStaticConflictGraph *)cgraph;
   return cg->size();
 }
 
-char CG_conflicting( void *cgraph, int n1, int n2 ) {
+char CBC_LINKAGE CG_conflicting( void *cgraph, int n1, int n2 ) {
   const CoinStaticConflictGraph *cg = (CoinStaticConflictGraph *)cgraph;
   return (char) cg->conflicting(n1, n2);
 }
 
 /** @brief Density of the conflict graph */
-double CG_density( void *cgraph ) {
+double CBC_LINKAGE CG_density( void *cgraph ) {
   const CoinStaticConflictGraph *cg = (CoinStaticConflictGraph *)cgraph;
   return cg->density();
 }
 
 
-CGNeighbors CG_conflictingNodes(Cbc_Model *model, void *cgraph, size_t node) {
+CGNeighbors CBC_LINKAGE CG_conflictingNodes(Cbc_Model *model, void *cgraph, size_t node) {
   CGNeighbors result;
 
 #ifdef CBC_THREAD
@@ -4027,7 +4083,7 @@ Osi_getRowSense(void *osi, int row)
 }
 
 /** Generates cutting planes */
-void Cbc_generateCuts( Cbc_Model *cbcModel, enum CutType ct, void *oc, int depth, int pass ) {
+void CBC_LINKAGE Cbc_generateCuts( Cbc_Model *cbcModel, enum CutType ct, void *oc, int depth, int pass ) {
   assert(cbcModel && oc);
 
   OsiClpSolverInterface *solver = cbcModel->solver_;
@@ -4655,26 +4711,6 @@ Cbc_getRowNameIndex(Cbc_Model *model, const char *name)
   return it->second;
 }
 
-static char **to_char_vec( const vector< string > &names )
-{
-    size_t spaceVec = (sizeof(char*)*names.size());
-    size_t totLen = names.size(); // all \0
-    for ( int i=0 ; (i<(int)names.size()) ; ++i )
-        totLen += names[i].size();
-    totLen *= sizeof(char);
-
-    char **r = (char **)xmalloc(spaceVec+totLen);
-    assert( r );
-    r[0] = (char *)(r + names.size());
-    for ( size_t i=1 ; (i<names.size()) ; ++i )
-        r[i] = r[i-1] + names[i-1].size() + 1;
-
-    for ( size_t i=0 ; (i<names.size()) ; ++i )
-        strcpy(r[i], names[i].c_str());
-
-    return r;
-}
-
 static void *xmalloc( const size_t size )
 {
    void *result = malloc( size );
@@ -4774,7 +4810,7 @@ void Cbc_iniParams( Cbc_Model *model ) {
   model->dbl_param[DBL_PARAM_MAX_SECS_NOT_IMPROV_FS] =  COIN_DBL_MAX;
 }
 
-void Cbc_getBuildInfo(char *str) {
+void CBC_LINKAGE Cbc_getBuildInfo(char *str) {
   sprintf(str, "Cbc version: %s\n", CBC_VERSION);
   char s[128];
   sprintf(s, "Build date: %s\n", __DATE__);
