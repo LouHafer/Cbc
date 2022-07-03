@@ -47,6 +47,7 @@
 #include "CbcCountRowCut.hpp"
 #include "CbcFeasibilityBase.hpp"
 #include "CbcMessage.hpp"
+#include "CbcFathom.hpp"
 #ifdef CBC_HAS_CLP
 #include "OsiClpSolverInterface.hpp"
 #include "ClpSimplexOther.hpp"
@@ -687,10 +688,37 @@ int CbcNode::chooseBranch(CbcModel *model, CbcNode *lastNode, int numberPassesLe
         choice[i].possibleBranch = NULL;
       numberStrong = 0;
       bool canDoOneHot = false;
+#ifdef GET_ALL_SOLUTIONS
+      if (model->getCutoffIncrement()==-3333.0) {
+	int n1=0;
+	int n2=0;
+	for (i = 0; i < numberObjects; i++) {
+	  OsiObject *object = model->modifiableObject(i);
+	  int preferredWay;
+	  double infeasibility = object->infeasibility(&usefulInfo, preferredWay);
+          const CbcSimpleInteger *thisOne = dynamic_cast< const CbcSimpleInteger * >(object);
+	  int iColumn = thisOne->columnNumber();
+	  if (saveUpper[iColumn]>saveLower[iColumn]) {
+	    n1++;
+	    if (infeasibility)
+	      n2++;
+	  }
+	}
+	//printf("%d free %d infeasible\n",n1,n2);
+      }
+#endif
       for (i = 0; i < numberObjects; i++) {
         OsiObject *object = model->modifiableObject(i);
         int preferredWay;
         double infeasibility = object->infeasibility(&usefulInfo, preferredWay);
+#ifdef GET_ALL_SOLUTIONS
+	if (model->getCutoffIncrement()==-3333.0) {
+          const CbcSimpleInteger *thisOne = dynamic_cast< const CbcSimpleInteger * >(object);
+	  int iColumn = thisOne->columnNumber();
+	  if (saveUpper[iColumn]>saveLower[iColumn]) 
+	    infeasibility = 0.5;
+	}
+#endif
         int priorityLevel = object->priority();
         if (hotstartSolution) {
           // we are doing hot start
@@ -6563,7 +6591,7 @@ int CbcNode::chooseClpBranch(CbcModel *model,
   OsiObject *object = model->modifiableObject(numberObjects);
   CbcGeneralDepth *thisOne = dynamic_cast< CbcGeneralDepth * >(object);
   assert(thisOne);
-  OsiClpSolverInterface *clpSolver
+  OsiClpSolverInterface *clpSolver 
     = dynamic_cast< OsiClpSolverInterface * >(solver);
   assert(clpSolver);
   ClpSimplex *simplex = clpSolver->getModelPtr();
