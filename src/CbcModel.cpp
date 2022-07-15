@@ -90,6 +90,13 @@ typedef struct {
   int switches;
   int iModel;
 } rootBundle;
+#ifdef CBC_DEBUG_EXTRA
+// This really more for tuning than debugging
+// It allows developer to play around more
+// See CoinSolve.cpp
+extern int cbc_int_debug[4];
+extern double cbc_dbl_debug[4];
+#endif
 static void *doRootCbcThread(void *voidInfo);
 
 namespace {
@@ -5219,7 +5226,9 @@ void CbcModel::branchAndBound(int doStatistics)
 #endif
         if (tryNewSearch) {
           // back to solver without cuts?
-          OsiSolverInterface *solver2 = saveSolver->clone();
+	  // Yes as otherwise not totally safe
+          // OsiSolverInterface *solver2 = saveSolver->clone();
+          OsiSolverInterface *solver2 = continuousSolver_->clone();
           const double *lower = saveSolver->getColLower();
           const double *upper = saveSolver->getColUpper();
           for (int i = 0; i < numberIntegers_; i++) {
