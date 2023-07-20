@@ -142,6 +142,10 @@ void CbcCrashHandler(int sig);
 #include "CbcSolverHeuristics.hpp"
 #include "CbcStrategy.hpp"
 #include "CbcTreeLocal.hpp"
+//#define CBC_USE_OPENMP
+#ifdef CBC_USE_OPENMP
+#include "omp.h"
+#endif
 
 //#############################################################################
 //#############################################################################
@@ -557,6 +561,7 @@ static void putBackOtherSolutions(CbcModel *presolvedModel, CbcModel *model,
     presolvedModel->setBestObjectiveValue(objectiveValue);
     presolvedModel->solver()->setColSolution(bestSolution);
     // presolvedModel->setBestSolution(bestSolution,numberColumns,objectiveValue);
+    delete [] bestSolution;
   }
 }
 
@@ -1095,6 +1100,8 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
   // Save a copy of input for unit testing
   // Could also be used for friendly error messages?
   std::deque<std::string> saveInputQueue = inputQueue;
+  // copy if we are reading from option file
+  std::deque<std::string> partInputQueue;
   // Meaning 0 - start at very beginning
   // 1 start at beginning of preprocessing
   // 2 start at beginning of branch and bound
@@ -1582,7 +1589,13 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
             // we just had file name - do branch and bound
             field = "-solve";
          } else {
-            break;
+	   if (!partInputQueue.size())
+	     break;
+	   // switch back to original queue
+	   inputQueue = partInputQueue;
+	   std::deque<std::string> tempQueue;
+	   partInputQueue = tempQueue;
+	   continue;
          }
       }
 
@@ -1603,6 +1616,69 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
             if (field != "--") {
                // take off -
                field = field.substr(1);
+	       if (field == "optionfile") {
+		 if (!inputQueue.empty()) {
+		   field = CoinParamUtils::getNextField(inputQueue, interactiveMode, prompt);
+		   partInputQueue = inputQueue;
+		   std::deque<std::string> tempQueue;
+		   FILE * fp = fopen(field.c_str(),"r");
+		   if (!fp) {
+		     std::cout << "unable to open option file "
+			       << field << std::endl;
+		     std::deque<std::string> tempQueue;
+		     partInputQueue = tempQueue;
+		     continue;
+		   }
+		   /* format of file -
+		      comments line starts with *
+		      first character not blank
+		      command is first - if no - then - added
+		   */
+		   char line[200];
+		   std::cout << "Extra options - ";
+		   while (fgets(line, 200, fp)) {
+		     // skip comment
+		     if (line[0]=='*')
+		       continue;
+		     int nchar = strlen(line);
+		     if (nchar<2)
+		       continue;
+		     if (line[0]!='-') {
+		       memmove(line+1,line,nchar+1);
+		       nchar++;
+		       line[0]='-';
+		     }
+		     char *pos=line;
+		     char *put=line;
+		     while (true) {
+		       while (*pos != '\n' && *pos != '\0'
+			      && *pos != ' ' && *pos != '\t') 
+			 pos++;
+		       char save = *pos;
+		       *pos = '\0';
+		       if (strlen(put)) {
+			 tempQueue.push_back(put);
+			 std::cout << put << " ";
+		       }
+		       if (save == ' ' || save == '\t') {
+			 pos++;
+			 while (*pos == ' ' || *pos == '\t')
+			   pos++;
+			 put = pos;
+		       } else {
+			 break; // end of line
+		       }
+		     }
+		   }
+		   fclose(fp);
+		   std::cout << std::endl;
+   		   inputQueue = tempQueue;
+		   continue;
+		 } else if (partInputQueue.size()) {
+		   inputQueue = partInputQueue;
+		   continue;
+		 }
+	       }
             } else {
                // special dispensation - taken as -import --
                field = "import";
@@ -2131,6 +2207,8 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                  model_.setNumberStrong(iValue);
               } else if (cbcParamCode == CbcParam::PROCESSTUNE) {
                  tunePreProcess = iValue;
+	      } else if (cbcParamCode == CbcParam::PRINTOPTIONS) {
+		printOptions = iValue;
               } else if (cbcParamCode == CbcParam::VERBOSE) {
                  verbose = iValue;
               } else if (cbcParamCode == CbcParam::EXPERIMENT && iValue < 10000) {
@@ -2570,7 +2648,7 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
 	      }
               break;
             case ClpParam::KEEPNAMES:
-              keepImportNames = 1 - mode;
+              keepImportNames = mode;
               break;
             case ClpParam::PRESOLVE:
               if (mode == 0)
@@ -3840,7 +3918,7 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
 #ifdef CBC_THREAD
                       int numberThreads = parameters[CbcParam::THREADS]->intVal();
                       cbcModel->setNumberThreads(numberThreads % 100);
-                      cbcModel->setThreadMode(CoinMin(numberThreads / 100, 7));
+                      cbcModel->setThreadMode(CoinMin((numberThreads%1000) / 100, 7));
 #endif
                       // setCutAndHeuristicOptions(*cbcModel);
                       cbcModel->branchAndBound();
@@ -3959,7 +4037,7 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                 si->setWarmStart(NULL);
                 int returnCode = 0;
                 if (callBack != NULL)
-                  callBack(&model_, 1);
+                  returnCode = callBack(&model_, 1);
                 if (returnCode) {
                   // exit if user wants
                   delete babModel_;
@@ -4955,12 +5033,23 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
 		      iColumn = back[iColumn];
 		      if (iColumn>=0) {
 			if (columnLower[iColumn]<lotsize[i].low&&
-			    columnUpper[iColumn]>lotsize[i].low) {
+			    columnUpper[iColumn]>lotsize[i].low-1.0e-8) {
 			  points[2] = lotsize[i].low;
 			  points[3] = columnUpper[iColumn];
 			  objects[numberLotSizing++] =
 			    new CbcLotsize(babModel_, iColumn, 2,
 					   points, true);
+			} else {
+			  //printf("SC %d new bounds %g,%g was %d low %g high %g\n",iColumn,
+			  //	 columnLower[iColumn],columnUpper[iColumn],
+			  //	 lotsize[i].column,lotsize[i].low,lotsize[i].high);
+			  if (columnUpper[iColumn]<lotsize[i].low) {
+			    if (columnLower[iColumn]) {
+			      printf("Infeasible due to SC variables?!\n");
+			    } else {
+			      solver2->setColUpper(iColumn,0.0);
+			    }
+			  }
 			}
 		      }
                     }
@@ -7597,7 +7686,38 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
 #ifdef CBC_THREAD
                 int numberThreads = parameters[CbcParam::THREADS]->intVal();
                 babModel_->setNumberThreads(numberThreads % 100);
-                babModel_->setThreadMode(numberThreads / 100);
+                babModel_->setThreadMode((numberThreads%1000) / 100);
+#ifdef CBC_USE_OPENMP
+		if (numberThreads>100) {
+		  int realThreads = numberThreads%100;
+		  int pretendThreads;
+		  bool ompMode = true;
+		  if (numberThreads<1000) {
+		    if (numberThreads<800) {
+		      omp_set_num_threads(realThreads);
+		      pretendThreads = 2*realThreads;
+		    } else {
+		      babModel_->setThreadMode(1);
+		      ompMode = false;
+		      pretendThreads = realThreads;
+		    }
+		  } else {
+		    int multiplier = CoinMax((numberThreads%1000)/100,1);
+		    babModel_->setThreadMode(1);
+		    pretendThreads = multiplier*realThreads;
+		  }
+		  char buffer[100];
+		  if (ompMode) {
+		    omp_set_num_threads(realThreads);
+		    sprintf(buffer,"Deterministic parallel using %d OpenMP threads and pretending %d",realThreads,pretendThreads); 
+		  } else {
+		    sprintf(buffer,"Deterministic parallel using %d threads",realThreads); 
+		  }
+		  babModel_->messageHandler()->message(CBC_GENERAL, babModel_->messages())
+		    << buffer << CoinMessageEol;
+		  babModel_->setNumberThreads(pretendThreads);
+		}
+#endif
 #endif
                 int returnCode = 0;
                 if (callBack != NULL)
@@ -7849,6 +7969,12 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                   babModel_->setBestSolution(osiclp->getColSolution(),
                                              osiclp->getNumCols(), 1.5325e10);
                 } else {
+		  // for very fine tuning
+		  if (parameters[CbcParam::OPTIONS]->intVal()) {
+		    int addOptions = parameters[CbcParam::OPTIONS]->intVal();
+		    int options = babModel_->specialOptions();
+		    babModel_->setSpecialOptions(options|addOptions);
+		  }
                   babModel_->branchAndBound(statistics);
                 }
 #else
@@ -8219,6 +8345,12 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
 		  babModel_ = NULL;
 		  return returnCode;
 		}
+		// for very fine tuning
+		if (parameters[CbcParam::OPTIONS]->intVal()) {
+		  int addOptions = parameters[CbcParam::OPTIONS]->intVal();
+		  int options = babModel_->specialOptions();
+		  babModel_->setSpecialOptions(options|addOptions);
+		}
                 babModel_->branchAndBound(statistics);
 #ifdef CBC_HAS_NAUTY
                 if (nautyAdded) {
@@ -8301,13 +8433,13 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                                             babModel_->numberBeforeTrust());
                 // Set up pre-processing
                 int translate2[] = {9999, 1, 1, 3, 2, 4, 5, 6, 6};
-                if (preProcess)
+                if (preProcess) 
                   strategy.setupPreProcessing(translate2[preProcess]);
                 babModel_->setStrategy(strategy);
 #ifdef CBC_THREAD
                 int numberThreads = parameters[CbcParam::THREADS]->intVal();
                 babModel_->setNumberThreads(numberThreads % 100);
-                babModel_->setThreadMode(numberThreads / 100);
+                babModel_->setThreadMode((numberThreads%1000) / 100);
 #endif
 #ifndef CBC_OTHER_SOLVER
                 if (outputFormat == 5) {
@@ -8456,11 +8588,14 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
               }
 #endif
               statistics_cut_time = 0.0;
+	      double direction =
+		babModel_->solver()->getObjSense();
                 // Print more statistics
                 buffer.str("");
                 buffer << "Cuts at root node changed objective from "
-                       << babModel_->getContinuousObjective() << " to " 
-                       << babModel_->rootObjectiveAfterCuts();
+                       << babModel_->getContinuousObjective()*direction
+		       << " to " 
+                       << babModel_->rootObjectiveAfterCuts()*direction;
                 printGeneralMessage(model_, buffer.str());
                 numberGenerators = babModel_->numberCutGenerators();
                 // can get here twice!
@@ -9458,7 +9593,7 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                      continue;
                   }
                   OsiClpSolverInterface solver(model2);
-                  solver.writeLp(fp, 1.0e-12);
+                  solver.writeLp(fp, 1.0e-12, 10, 10);
 		  fclose(fp);
                }
                if (deleteModel2)
@@ -9528,7 +9663,7 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                         printGeneralMessage(model_, buffer.str());
                         continue;
                      }
-                     clpSolver->writeLp(fp, 1.0e-12);
+                     clpSolver->writeLp(fp, 1.0e-12, 10, 10);
                   }
                   if (rowNames) {
                      for (iRow = 0; iRow < numberRows; iRow++) {
@@ -10821,7 +10956,7 @@ clp watson.mps -\nscaling off\nprimalsimplex");
                     // bound or rhs ranging
                   case 6:
                   case 7:
-                    solver->primalRanging(numberRows, which, valueIncrease,
+                    solver->primalRanging(number, which, valueIncrease,
                                           sequenceIncrease, valueDecrease,
                                           sequenceDecrease);
                     break;
@@ -13116,6 +13251,7 @@ static int nautiedConstraints(CbcModel &model, int maxPass) {
       numberGenerators = symmetryInfo.getNtyInfo()->getNumGenerators();
     }
     if (numberGenerators) {
+      const double * solution = solver->getColSolution(); 
       // symmetryInfo.Print_Orbits();
       int numberUsefulOrbits = symmetryInfo.numberUsefulOrbits();
       if (numberUsefulOrbits) {
@@ -13123,8 +13259,9 @@ static int nautiedConstraints(CbcModel &model, int maxPass) {
         symmetryInfo.fillOrbits(/*true*/);
         const int *orbits = symmetryInfo.whichOrbit();
         int numberUsefulOrbits = symmetryInfo.numberUsefulOrbits();
-        int *counts = new int[numberUsefulOrbits];
-        memset(counts, 0, numberUsefulOrbits * sizeof(int));
+        int *counts = new int[2*numberUsefulOrbits];
+	int *active = counts+numberUsefulOrbits;
+        memset(counts, 0, 2*numberUsefulOrbits * sizeof(int));
         int numberColumns = solver->getNumCols();
         int numberUseful = 0;
         if (changeType == 1) {
@@ -13135,6 +13272,9 @@ static int nautiedConstraints(CbcModel &model, int maxPass) {
               if (solver->isBinary(i)) {
                 counts[iOrbit]++;
                 numberUseful++;
+		double value = solution[i];
+		if (fabs(value-floor(value+0.5))>1.0e-5)
+		  active[iOrbit]++;
               }
             }
           }
@@ -13146,6 +13286,9 @@ static int nautiedConstraints(CbcModel &model, int maxPass) {
               if (solver->isInteger(i)) {
                 counts[iOrbit]++;
                 numberUseful++;
+		double value = solution[i];
+		if (fabs(value-floor(value+0.5))>1.0e-5)
+		  active[iOrbit]++;
               }
             }
           }
@@ -13156,17 +13299,25 @@ static int nautiedConstraints(CbcModel &model, int maxPass) {
             if (iOrbit >= 0) {
               counts[iOrbit]++;
               numberUseful++;
+	      double value = solution[i];
+	      if (fabs(value-floor(value+0.5))>1.0e-5)
+		active[iOrbit]++;
             }
           }
         }
         int iOrbit = -1;
-#define LONGEST 0
+#define LONGEST 1
 #if LONGEST
-        // choose longest
+        // choose longest (and most active)
         int maxOrbit = 0;
+	int maxActive = 0;
         for (int i = 0; i < numberUsefulOrbits; i++) {
           if (counts[i] > maxOrbit) {
             maxOrbit = counts[i];
+	    maxActive = active[i];
+            iOrbit = i;
+          } else if (counts[i] == maxOrbit && active[i] > maxActive) {
+	    maxActive = active[i];
             iOrbit = i;
           }
         }

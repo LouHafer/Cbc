@@ -644,8 +644,55 @@ bool CbcCutGenerator::generateCuts(OsiCuts &cs, int fullScan, OsiSolverInterface
       int numberRowCutsAfter = cs.sizeRowCuts();
       for (int k = numberRowCutsAfter - 1; k >= numberRowCutsBefore; k--) {
         OsiRowCut &thisCut = cs.rowCut(k);
-	if (debugger2->invalidCut(thisCut))
+	if (debugger2->invalidCut(thisCut)) {
+	  // check solver is valid
+	  OsiSolverInterface * temp = solver->clone();
+	  temp->resolve();
+	  int numberColumns = temp->getNumCols();
+	  const double * solution = solver->getColSolution();
+	  const double * solution2 = temp->getColSolution();
+	  for (int i=0;i<numberColumns;i++) {
+	    if (fabs(solution[i]-solution2[i])>1.0e-5) {
+	      printf("first mismatch on solution %d %g and %g\n",i,
+		     solution[i],solution2[i]);
+	      break;
+	    }
+	  }
+	  const double *solutionO = debugger2->optimalSolution();
+	  const double *lower = temp->getColLower();
+	  const double *upper = temp->getColUpper();
+	  int numberRows = temp->getNumRows();
+	  int nCont = model_->continuousSolver()->getNumRows();
+	  const CoinPackedMatrix *rowCopy = temp->getMatrixByRow();
+	  const int *column = rowCopy->getIndices();
+	  const int *rowLength = rowCopy->getVectorLengths();
+	  const CoinBigIndex *rowStart = rowCopy->getVectorStarts();
+	  const double *rowLower = temp->getRowLower();
+	  const double *rowUpper = temp->getRowUpper();
+	  const double *element = rowCopy->getElements();
+	  for (int i=nCont;i<numberRows;i++) {
+	    double sum = 0.0;
+	    for (CoinBigIndex j=rowStart[i];j<rowStart[i]+rowLength[i];j++) {
+	      int iColumn = column[j];
+	      sum += element[j]*solutionO[iColumn];
+	    }
+	    if (sum<rowLower[i]-1.0e-4 || sum>rowUpper[i]+1.0e-4)
+	      printf("bad row %d %g <= %g <= %g\n",
+		     i,rowLower[i],sum,rowUpper[i]);
+	  }
+	  for (int i = 0; i < numberColumns; i++) {
+	    if (temp->isInteger(i)) {
+	      double value = floor(solutionO[i] + 0.5);
+	      assert(value >= lower[i] && value <= upper[i]);
+	      temp->setColLower(i, value);
+	      temp->setColUpper(i, value);
+	    }
+	  }
+	  temp->resolve();
+	  assert (temp->isProvenOptimal());
+	  delete temp;
 	  abort();
+	}
       }
     }
 #endif
@@ -980,7 +1027,7 @@ bool CbcCutGenerator::generateCuts(OsiCuts &cs, int fullScan, OsiSolverInterface
       int nEls = 0;
       int nCuts = numberRowCutsAfter - numberRowCutsBefore;
       // Remove NULL cuts!
-      int nNull = 0;
+      //int nNull = 0;
       const double *solution = solver->getColSolution();
       bool feasible = true;
       double primalTolerance = 1.0e-7;
@@ -1011,7 +1058,7 @@ bool CbcCutGenerator::generateCuts(OsiCuts &cs, int fullScan, OsiSolverInterface
           } else {
             sum = 0.0;
             cs.eraseRowCut(k);
-            nNull++;
+            //nNull++;
           }
         }
       }
@@ -1185,7 +1232,7 @@ bool CbcCutGenerator::generateCuts(OsiCuts &cs, int fullScan, OsiSolverInterface
         }
         CoinSort_2(sort, sort + nCuts, which);
         // Now see which ones are too similar
-        int nParallel = 0;
+        //int nParallel = 0;
         double testValue = (depth > 1) ? 0.99 : 0.999999;
         for (k = 0; k < nCuts; k++) {
           int j = which[k];
@@ -1237,7 +1284,7 @@ bool CbcCutGenerator::generateCuts(OsiCuts &cs, int fullScan, OsiSolverInterface
               if (fabs(ub - ubB) > tolerance)
                 parallel = false;
               if (parallel) {
-                nParallel++;
+                //nParallel++;
                 sort[k] = 0.0;
                 break;
               }

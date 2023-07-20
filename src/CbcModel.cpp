@@ -16,6 +16,8 @@
 //#define CHECK_NODE_FULL
 //#define NODE_LOG
 //#define GLOBAL_CUTS_JUST_POINTERS
+//#define MORE_DJ_FIXING
+//#define HEURISTIC_INFORM
 #ifdef CGL_DEBUG_GOMORY
 extern int gomory_try;
 #endif
@@ -986,12 +988,16 @@ void CbcModel::analyzeObjective()
       // now look at continuous
       bool allGood = true;
       double direction = solver_->getObjSense();
+#if COIN_DEVELOP > 1
       int numberObj = 0;
+#endif
       for (iColumn = 0; iColumn < numberColumns; iColumn++) {
         if (upper[iColumn] > lower[iColumn]) {
           double objValue = objective[iColumn] * direction;
           if (objValue && !solver_->isInteger(iColumn)) {
+#if COIN_DEVELOP > 1
             numberObj++;
+#endif
             CoinBigIndex start = columnStart[iColumn];
             CoinBigIndex end = start + columnLength[iColumn];
             if (objValue > 0.0) {
@@ -1393,8 +1399,13 @@ void CbcModel::saveModel(OsiSolverInterface *saveSolver,
         tryNewSearch = false;
 #else
       numberFixed += numberFixed2;
-      if (numberFixed * 20 < numberColumns)
-        tryNewSearch = false;
+      if (numberNodes_) {
+	if (numberFixed * 20 < numberColumns)
+	  tryNewSearch = false;
+      } else {
+	if (!numberFixed)
+	  tryNewSearch = false;
+      }
 #endif
     }
     // check for odd cuts
@@ -1847,6 +1858,7 @@ void CbcModel::AddIntegers() {
 */
 
 #ifdef CONFLICT_CUTS
+//#define PRINT_CONFLICT 1
 #if PRINT_CONFLICT == 1
 static int numberConflictCuts = 0;
 static int lastNumberConflictCuts = 0;
@@ -2431,7 +2443,7 @@ void CbcModel::branchAndBound(int doStatistics)
       // best solution found by various heuristics - set solution
       char general[200];
       sprintf(general, "Solution of %g already found by heuristic",
-              bestObjective_);
+              trueBestObjValue());
       messageHandler()->message(CBC_GENERAL, messages())
           << general << CoinMessageEol;
       setCutoff(1.0e50); // As best solution should be worse than cutoff
@@ -2734,7 +2746,7 @@ void CbcModel::branchAndBound(int doStatistics)
 #ifdef CBC_HAS_NAUTY
   // maybe allow on fix and restart later
   if ((moreSpecialOptions2_ & (128 | 256)) != 0) {
-    if ((specialOptions_ & 2048) == 0) {
+    if ((specialOptions_ & 2048) == 0 && numberIntegers_ == numberObjects_) {
       symmetryInfo_ = new CbcSymmetry();
       symmetryInfo_->setupSymmetry(this);
       int numberGenerators = symmetryInfo_->statsOrbits(this, 0);
@@ -3260,6 +3272,15 @@ void CbcModel::branchAndBound(int doStatistics)
       solver_->initialSolve();
     }
   }
+  //#define CBC_EARLY_RESTART
+#ifdef CBC_EARLY_RESTART
+  if (!parentModel_&&(specialOptions_&32768)!=0) {
+    // Save copy of solver
+    OsiSolverInterface *saveSolver = solver_->clone();
+    double checkCutoffForRestart = 1.0e100;
+    saveModel(saveSolver, &checkCutoffForRestart, &feasible);
+  }
+#endif
   /*
       Grepping through the code, it would appear that this is a command line
       debugging hook.  There's no obvious place in the code where this is set to
@@ -4161,6 +4182,17 @@ void CbcModel::branchAndBound(int doStatistics)
     feasible = false;
   }
 #endif
+#ifdef CBC_TRY_SCIP
+  if (feasible && (specialOptions_ & 16384) != 0 && !parentModel_) {
+    int tryScip(CbcModel * model, int type);
+    // Use Scip to do search!
+    // if 27 bit (134217728) - use continuousSolver
+    int useCurrent = (specialOptions_&134217728) ? 0 : 1;
+    lastHeuristic_ = NULL;
+    status_ = tryScip(this,useCurrent);
+    feasible = false;
+  }
+#endif
   if (!parentModel_ && (moreSpecialOptions_ & 268435456) != 0) {
     // try idiotic idea
     CbcObject *obj = new CbcIdiotBranch(this);
@@ -4181,7 +4213,7 @@ void CbcModel::branchAndBound(int doStatistics)
     delete obj;
   }
   int saveNumberSolves = numberSolves_;
-  int saveNumberIterations = numberIterations_;
+  node_count saveNumberIterations = numberIterations_;
   if ((fastNodeDepth_ >= 0 || (moreSpecialOptions_ & 33554432) != 0) &&
       /*!parentModel_*/ (specialOptions_ & 2048) == 0) {
     // add in a general depth object doClp
@@ -4944,8 +4976,8 @@ void CbcModel::branchAndBound(int doStatistics)
   CbcNode *delNode[MAX_DEL_NODE + 1];
   int nDeleteNode = 0;
   // For Printing etc when parallel
-  int lastEvery1000 = 0;
-  int lastPrintEvery = 0;
+  node_count lastEvery1000 = 0;
+  node_count lastPrintEvery = 0;
   int numberConsecutiveInfeasible = 0;
 #define PERTURB_IN_FATHOM
 #ifdef PERTURB_IN_FATHOM
@@ -5496,24 +5528,24 @@ void CbcModel::branchAndBound(int doStatistics)
         else
           lastBestPossibleObjective = bestPossibleObjective_;
         messageHandler()->message(CBC_STATUS, messages())
-            << numberNodes_ << CoinMax(nNodes, 1) << bestObjective_
-            << bestPossibleObjective_ << getCurrentSeconds() << CoinMessageEol;
+            << numberNodes_ << CoinMax(nNodes, 1) << trueBestObjValue()
+            << trueObjValue(bestPossibleObjective_) << getCurrentSeconds() << CoinMessageEol;
       } else if (intParam_[CbcPrinting] == 1) {
         messageHandler()->message(CBC_STATUS2, messages())
-            << numberNodes_ << nNodes << bestObjective_
-            << bestPossibleObjective_ << tree_->lastDepth()
+            << numberNodes_ << nNodes << trueBestObjValue()
+            << trueObjValue(bestPossibleObjective_) << tree_->lastDepth()
             << tree_->lastUnsatisfied() << tree_->lastObjective()
             << numberIterations_ << getCurrentSeconds() << CoinMessageEol;
       } else if (!numberExtraIterations_) {
         messageHandler()->message(CBC_STATUS2, messages())
-            << numberNodes_ << nNodes << bestObjective_
-            << bestPossibleObjective_ << tree_->lastDepth()
+            << numberNodes_ << nNodes << trueBestObjValue()
+            << trueObjValue(bestPossibleObjective_) << tree_->lastDepth()
             << tree_->lastUnsatisfied() << numberIterations_
             << getCurrentSeconds() << CoinMessageEol;
       } else {
         messageHandler()->message(CBC_STATUS3, messages())
             << numberNodes_ << numberFathoms_ << numberExtraNodes_ << nNodes
-            << bestObjective_ << bestPossibleObjective_ << tree_->lastDepth()
+            << trueBestObjValue() << trueObjValue(bestPossibleObjective_) << tree_->lastDepth()
             << tree_->lastUnsatisfied() << numberIterations_
             << numberExtraIterations_ << getCurrentSeconds() << CoinMessageEol;
       }
@@ -5782,20 +5814,16 @@ void CbcModel::branchAndBound(int doStatistics)
   if (eventHandler) {
     eventHandler->event(CbcEventHandler::endSearch);
   }
-#ifdef CBC_HAS_NAUTY
-  if (rootSymmetryInfo_)
-    rootSymmetryInfo_->statsOrbits(this, 2);
-#endif
   if (!status_) {
     // Set best possible unless stopped on gap
     if (secondaryStatus_ != 2)
       bestPossibleObjective_ = bestObjective_;
     handler_->message(CBC_END_GOOD, messages_)
-        << bestObjective_ << numberIterations_ << numberNodes_
+        << trueBestObjValue() << numberIterations_ << numberNodes_
         << getCurrentSeconds() << CoinMessageEol;
   } else {
     handler_->message(CBC_END, messages_)
-        << bestObjective_ << bestPossibleObjective_ << numberIterations_
+      << trueBestObjValue() << trueObjValue(bestPossibleObjective_) << numberIterations_
         << numberNodes_ << getCurrentSeconds() << CoinMessageEol;
   }
   if ((moreSpecialOptions_ & 4194304) != 0) {
@@ -7785,7 +7813,14 @@ bool CbcModel::isProvenDualInfeasible() const {
 }
 // Node limit reached?
 bool CbcModel::isNodeLimitReached() const {
+#ifndef CBC_FEW_NODE_COUNTS
+  if (intParam_[CbcMaxNumNode] == COIN_INT_MAX)
+    return false;
+  else
+    return numberNodes_ >= intParam_[CbcMaxNumNode];
+#else
   return numberNodes_ >= intParam_[CbcMaxNumNode];
+#endif
 }
 // Time limit reached?
 bool CbcModel::isSecondsLimitReached() const {
@@ -8151,13 +8186,13 @@ int CbcModel::addCuts(CbcNode *node, CoinWarmStartBasis *&lastws) {
           int i1 = 0;
           int i2 = 0;
           int nDiff = 0;
-          int nSame = 0;
+          //int nSame = 0;
           if (lastNumberCuts2_ == numberToAdd) {
             for (int i = 0; i < numberToCheck; i++) {
               if (lastCut_[i1++] != addCuts[i2++]) {
                 nDiff++;
               } else {
-                nSame++;
+                //nSame++;
               }
             }
           } else if (lastNumberCuts2_ > numberToAdd) {
@@ -8169,14 +8204,14 @@ int CbcModel::addCuts(CbcNode *node, CoinWarmStartBasis *&lastws) {
                   i1++;
                   nDiff2--;
                   if (lastCut_[i1] == addCuts[i2]) {
-                    nSame++;
+                    //nSame++;
                     break;
                   } else {
                     nDiff++;
                   }
                 }
               } else {
-                nSame++;
+                //nSame++;
               }
             }
             nDiff += nDiff2;
@@ -8189,14 +8224,14 @@ int CbcModel::addCuts(CbcNode *node, CoinWarmStartBasis *&lastws) {
                   i2++;
                   nDiff2--;
                   if (lastCut_[i1] == addCuts[i2]) {
-                    nSame++;
+                    //nSame++;
                     break;
                   } else {
                     nDiff++;
                   }
                 }
               } else {
-                nSame++;
+                //nSame++;
               }
             }
             nDiff += nDiff2;
@@ -8334,6 +8369,8 @@ int CbcModel::reducedCostFix()
   double cutoff = getCutoff();
   double direction = solver_->getObjSense();
   double gap = cutoff - solver_->getObjValue() * direction;
+  if (gap>1.0e10)
+    return 0; // no solution yet
   double tolerance;
   solver_->getDblParam(OsiDualTolerance, tolerance);
   if (gap <= 0.0)
@@ -8516,6 +8553,19 @@ bool CbcModel::solveWithCuts(OsiCuts &cuts, int numberTries, CbcNode *node)
   double cut_obj[CUT_HISTORY];
   for (int j = 0; j < CUT_HISTORY; j++)
     cut_obj[j] = -COIN_DBL_MAX;
+  // if lazy constraints were added before normal cuts done - delete them
+  if ((moreSpecialOptions2_ & 65536) != 0) {
+    int numberRowsBefore = continuousSolver_->getNumRows();
+    int numberRowsNow = solver_->getNumRows();
+    if (numberRowsNow>numberRowsBefore) {
+      int numberDelete = numberRowsNow-numberRowsBefore;
+      int * which = new int [numberDelete];
+      for (int i=0;i<numberDelete;i++)
+	which[i] = i+numberRowsBefore;
+      solver_->deleteRows(numberDelete,which);
+      delete [] which;
+    }
+  }
 #ifdef CBC_HAS_CLP
   OsiClpSolverInterface *clpSolver =
       dynamic_cast<OsiClpSolverInterface *>(solver_);
@@ -8619,11 +8669,14 @@ bool CbcModel::solveWithCuts(OsiCuts &cuts, int numberTries, CbcNode *node)
       (moreSpecialOptions_ & 4194304) != 0 && clpSolver) {
     if (!topOfTree_ && masterThread_)
       topOfTree_ = masterThread_->master_->baseModel_->topOfTree_;
-    assert(topOfTree_);
     int iType = 0;
-    OsiRowCut *cut =
-        clpSolver->modelCut(topOfTree_->lower(), topOfTree_->upper(),
-                            numberRowsAtContinuous_, whichGenerator_, iType);
+    OsiRowCut *cut; 
+    if (topOfTree_)
+      cut = clpSolver->modelCut(topOfTree_->lower(), topOfTree_->upper(),
+			numberRowsAtContinuous_, whichGenerator_, iType);
+    else
+      cut = clpSolver->modelCut(solver_->getColLower(), solver_->getColUpper(),
+			numberRowsAtContinuous_, whichGenerator_, iType);
     if (cut) {
       // cut->print();
       if (!iType) {
@@ -8700,6 +8753,11 @@ bool CbcModel::solveWithCuts(OsiCuts &cuts, int numberTries, CbcNode *node)
 #ifdef CHECK_KNOWN_SOLUTION
   if (onOptimalPath && (solver_->isDualObjectiveLimitReached() || !feasible)) {
     printf("help 1\n");
+  }
+#endif
+#ifdef MORE_DJ_FIXING
+  if (feasible) {
+    reducedCostFix();
   }
 #endif
   /*
@@ -8947,9 +9005,6 @@ bool CbcModel::solveWithCuts(OsiCuts &cuts, int numberTries, CbcNode *node)
   /*
       Do reduced cost fixing.
     */
-  int xxxxxx = 0;
-  if (xxxxxx)
-    solver_->resolve();
   reducedCostFix();
   /*
       Set up for at most numberTries rounds of cut generation. If numberTries is
@@ -9197,7 +9252,7 @@ bool CbcModel::solveWithCuts(OsiCuts &cuts, int numberTries, CbcNode *node)
       handler_->message(CBC_ROOT_DETAIL, messages_)
           << currentPassNumber_ << solver_->getNumRows()
           << solver_->getNumRows() - numberRowsAtContinuous_
-          << solver_->getObjValue() << CoinMessageEol;
+          << trueObjValue(solver_->getObjValue()) << CoinMessageEol;
     }
     // see if looks like solution
     bool lazy = false;
@@ -9676,7 +9731,9 @@ bool CbcModel::solveWithCuts(OsiCuts &cuts, int numberTries, CbcNode *node)
 	  }
         }
         if (numberTries > 0) {
+#ifndef MORE_DJ_FIXING
           reducedCostFix();
+#endif
           lastObjective = direction * solver_->getObjValue();
         }
       }
@@ -10183,7 +10240,7 @@ bool CbcModel::solveWithCuts(OsiCuts &cuts, int numberTries, CbcNode *node)
     }
     if (!numberNodes_) {
       handler_->message(CBC_ROOT, messages_)
-          << numberNewCuts_ << startObjective << thisObjective
+	<< numberNewCuts_ << trueObjValue(startObjective) << trueObjValue(thisObjective)
           << currentPassNumber_%100000 << CoinMessageEol;
 #ifdef CBC_NAMES_FOR_COMPARE
       if ((specialOptions_&2048) == 0) {
@@ -11249,6 +11306,43 @@ int CbcModel::resolve(CbcNodeInfo *parent, int whereFrom, double *saveSolution,
       onOptimalPath = true;
       printf("On optimal path d\n");
       solver_->writeMpsNative("onopt.mps", NULL, NULL, 2);
+      // but check cuts
+      OsiSolverInterface * temp = solver_->clone();
+      const double *solution = debugger->optimalSolution();
+      const double *lower = temp->getColLower();
+      const double *upper = temp->getColUpper();
+      int numberColumns = temp->getNumCols();
+      int numberRows = temp->getNumRows();
+      int n = continuousSolver_->getNumRows();
+      const CoinPackedMatrix *rowCopy = temp->getMatrixByRow();
+      const int *column = rowCopy->getIndices();
+      const int *rowLength = rowCopy->getVectorLengths();
+      const CoinBigIndex *rowStart = rowCopy->getVectorStarts();
+      const double *rowLower = temp->getRowLower();
+      const double *rowUpper = temp->getRowUpper();
+      const double *element = rowCopy->getElements();
+      for (int i=n;i<numberRows;i++) {
+	double sum = 0.0;
+	for (CoinBigIndex j=rowStart[i];j<rowStart[i]+rowLength[i];j++) {
+	  int iColumn = column[j];
+	  sum += element[j]*solution[iColumn];
+	}
+	if (sum<rowLower[i]-1.0e-4 || sum>rowUpper[i]+1.0e-4)
+	  printf("bad row %d %g <= %g <= %g\n",
+		 i,rowLower[i],sum,rowUpper[i]);
+      }
+      for (int i = 0; i < numberColumns; i++) {
+	if (temp->isInteger(i)) {
+	  double value = floor(solution[i] + 0.5);
+	  assert(value >= lower[i] && value <= upper[i]);
+	  temp->setColLower(i, value);
+	  temp->setColUpper(i, value);
+	}
+      }
+      temp->writeMpsNative("onopt2.mps", NULL, NULL, 2);
+      temp->resolve();
+      assert (temp->isProvenOptimal());
+      delete temp;
     }
   }
   // We may have deliberately added in violated cuts - check to avoid message
@@ -11373,7 +11467,7 @@ int CbcModel::resolve(CbcNodeInfo *parent, int whereFrom, double *saveSolution,
     }
 #endif
     if (nTightened >= 0) {
-      resolve(solver_);
+      int nFix = resolve(solver_);
       numberIterations_ += solver_->getIterationCount();
       feasible = (solver_->isProvenOptimal() &&
                   !solver_->isDualObjectiveLimitReached());
@@ -11393,7 +11487,10 @@ int CbcModel::resolve(CbcNodeInfo *parent, int whereFrom, double *saveSolution,
           feasible = false;
         }
       } else if (solver_->isAbandoned()) {
-        setMaximumSeconds(-COIN_DBL_MAX);
+ 	if (nFix!=-1) 
+ 	  setMaximumSeconds(-COIN_DBL_MAX);
+ 	else
+ 	  feasible = false;
       }
 #ifdef CBC_HAS_CLP
       if (clpSolver && feasible && !numberNodes_ && false) {
@@ -11689,9 +11786,11 @@ CbcModel *CbcModel::findCliques(bool makeEquality, int atLeastThisMany,
     lookup[integerVariable_[i]] = i;
 
   // Statistics
+#if COIN_DEVELOP > 1
   int totalP1 = 0, totalM1 = 0;
   int numberBig = 0, totalBig = 0;
   int numberFixed = 0;
+#endif
 
   // Row copy
   const double *elementByRow = matrixByRow.getElements();
@@ -11791,7 +11890,9 @@ CbcModel *CbcModel::findCliques(bool makeEquality, int atLeastThisMany,
         break;
       } else if (abs(state) == 2) {
         // we can fix all
+#if COIN_DEVELOP > 1
         numberFixed += numberP1 + numberM1;
+#endif
         if (state > 0) {
           // fix all +1 at 0, -1 at 1
           for (i = 0; i < numberP1; i++)
@@ -11841,8 +11942,10 @@ CbcModel *CbcModel::findCliques(bool makeEquality, int atLeastThisMany,
              of a clique against the row upper bound.
                     */
           if (state > 0) {
+#if COIN_DEVELOP > 1
             totalP1 += numberP1;
             totalM1 += numberM1;
+#endif
             for (i = 0; i < numberP1; i++)
               type[i] = 1;
             for (i = 0; i < numberM1; i++) {
@@ -11850,8 +11953,10 @@ CbcModel *CbcModel::findCliques(bool makeEquality, int atLeastThisMany,
               type[numberP1++] = 0;
             }
           } else {
+#if COIN_DEVELOP > 1
             totalP1 += numberM1;
             totalM1 += numberP1;
+#endif
             for (i = 0; i < numberP1; i++)
               type[i] = 0;
             for (i = 0; i < numberM1; i++) {
@@ -11877,8 +11982,10 @@ CbcModel *CbcModel::findCliques(bool makeEquality, int atLeastThisMany,
           numberCliques++;
         } else if (numberP1 + numberM1 >= lessThanThis) {
           // too big
+#if COIN_DEVELOP > 1
           numberBig++;
           totalBig += numberP1 + numberM1;
+#endif
         }
       }
     }
@@ -14244,11 +14351,11 @@ void CbcModel::setBestSolution(CBC_Message how, double &objectiveValue,
 #endif
         if (largestAway > integerTolerance) {
           handler_->message(CBC_RELAXED1, messages_)
-              << objectiveValue2 << iAway << largestAway << integerTolerance
+	    << trueObjValue(objectiveValue2) << iAway << largestAway << integerTolerance
               << CoinMessageEol;
         } else {
           handler_->message(CBC_RELAXED2, messages_)
-              << objectiveValue2 << integerTolerance << CoinMessageEol;
+	    << trueObjValue(objectiveValue2) << integerTolerance << CoinMessageEol;
           // take
           CoinCopyN(solution2, numberColumns, solution);
           objectiveValue = objectiveValue2;
@@ -14301,7 +14408,7 @@ void CbcModel::setBestSolution(CBC_Message how, double &objectiveValue,
         handler_->message(CBC_NOTFEAS1, messages_) << CoinMessageEol;
       else
         handler_->message(CBC_NOTFEAS2, messages_)
-            << objectiveValue << cutoff << CoinMessageEol;
+	  << trueObjValue(objectiveValue) << trueObjValue(cutoff) << CoinMessageEol;
     } else if (objectiveValue < bestObjective_) {
       /*
               We have a winner. Install it as the new incumbent.
@@ -14397,7 +14504,7 @@ nPartiallyFixed %d , nPartiallyFixedBut %d , nUntouched %d\n",
 
       if (how != CBC_ROUNDING) {
         handler_->message(how, messages_)
-            << bestObjective_ << numberIterations_ << numberNodes_
+            << trueBestObjValue() << numberIterations_ << numberNodes_
             << getCurrentSeconds() << CoinMessageEol;
         dealWithEventHandler(CbcEventHandler::solution, objectiveValue,
                              solution);
@@ -14411,7 +14518,7 @@ nPartiallyFixed %d , nPartiallyFixedBut %d , nUntouched %d\n",
 	int saveLevel = handler_->logLevel();
 	handler_->setLogLevel(1);
         handler_->message(CBC_ROUNDING, messages_)
-            << bestObjective_ << name << numberIterations_ << numberNodes_
+            << trueBestObjValue() << name << numberIterations_ << numberNodes_
             << getCurrentSeconds() << CoinMessageEol;
 	handler_->setLogLevel(saveLevel);
         dealWithEventHandler(CbcEventHandler::heuristicSolution, objectiveValue,
@@ -14489,7 +14596,7 @@ nPartiallyFixed %d , nPartiallyFixedBut %d , nUntouched %d\n",
             handler_->message(CBC_NOTFEAS1, messages_) << CoinMessageEol;
           else
             handler_->message(CBC_NOTFEAS2, messages_)
-                << objectiveValue << cutoff << CoinMessageEol;
+	      << trueObjValue(objectiveValue) << cutoff << CoinMessageEol;
         }
       }
     } else {
@@ -14527,13 +14634,13 @@ nPartiallyFixed %d , nPartiallyFixedBut %d , nUntouched %d\n",
 
         if (how != CBC_ROUNDING) {
           handler_->message(how, messages_)
-              << bestObjective_ << numberIterations_ << numberNodes_
+              << trueBestObjValue() << numberIterations_ << numberNodes_
               << getCurrentSeconds() << CoinMessageEol;
         } else {
           assert(lastHeuristic_);
           const char *name = lastHeuristic_->heuristicName();
           handler_->message(CBC_ROUNDING, messages_)
-              << bestObjective_ << name << numberIterations_ << numberNodes_
+              << trueBestObjValue() << name << numberIterations_ << numberNodes_
               << getCurrentSeconds() << CoinMessageEol;
         }
       }
@@ -15478,7 +15585,7 @@ int CbcModel::resolve(OsiSolverInterface *solver) {
       if (clpSolver)
         clpSolver->getModelPtr()->setProblemStatus(1);
 #endif
-      return 0;
+      return -1;
     }
   }
 #endif
@@ -16029,7 +16136,7 @@ int CbcModel::chooseBranch(CbcNode *&newNode, int numberPassesLeft,
   if (currentNode_ && currentNode_->depth() >= 8)
     stateOfSearch_ += 10;
   int maxNodes = getMaximumNodes();
-  if (maxNodes > 999999 && maxNodes < 1000020) {
+  if (maxNodes > 999999 && maxNodes < 1000020 && false) {
     stateOfSearch_ = maxNodes - 1000000;
     if (!numberNodes_)
       printf("stateOfSearch always %d\n", stateOfSearch_);
@@ -16604,7 +16711,7 @@ void CbcModel::setBestSolution(const double *solution, int numberColumns,
       double objValue = direction * solver_->getObjValue();
       if (objValue > objectiveValue + 1.0e-8 * (1.0 + fabs(objectiveValue))) {
         sprintf(printBuffer, "Given objective value %g, computed %g",
-                objectiveValue, objValue);
+                trueObjValue(objectiveValue), trueObjValue(objValue));
         messageHandler()->message(CBC_GENERAL, messages())
             << printBuffer << CoinMessageEol;
       }
@@ -16634,7 +16741,7 @@ void CbcModel::setBestSolution(const double *solution, int numberColumns,
     } else {
       // message
       sprintf(printBuffer, "Solution with objective value %g saved",
-              objectiveValue);
+              trueObjValue(objectiveValue));
       messageHandler()->message(CBC_GENERAL, messages())
           << printBuffer << CoinMessageEol;
     }
@@ -18396,7 +18503,7 @@ int CbcModel::doOneNode(CbcModel *baseModel, CbcNode *&node,
         }
         if (newNode->branchingObject()) {
           handler_->message(CBC_BRANCH, messages_)
-              << numberNodes_ << newNode->objectiveValue()
+	    << numberNodes_ << trueObjValue(newNode->objectiveValue())
               << newNode->numberUnsatisfied() << newNode->depth()
               << CoinMessageEol;
           // Increment cut counts (taking off current)
@@ -18640,7 +18747,7 @@ int CbcModel::doOneNode(CbcModel *baseModel, CbcNode *&node,
       CoinCopyN(bestSolution_, numberColumns, baseModel->bestSolution_);
       baseModel->setCutoff(getCutoff());
       baseModel->handler_->message(CBC_ROUNDING, messages_)
-          << bestObjective_ << "heuristic" << baseModel->numberIterations_
+          << trueBestObjValue() << "heuristic" << baseModel->numberIterations_
           << baseModel->numberNodes_ << getCurrentSeconds() << CoinMessageEol;
     }
     baseModel->numberSolutions_++;
@@ -19657,11 +19764,12 @@ void CbcModel::setOptionalInteger(int index) {
 }
 
 bool CbcModel::stoppingCriterionReached() const {
-  return (numberNodes_ >= intParam_[CbcMaxNumNode] ||
+  return (isNodeLimitReached() ||
           numberSolutions_ >= intParam_[CbcMaxNumSol] || stoppedOnGap_ ||
           eventHappened_ || maximumSecondsReached() ||
-          (numberSolutions_ && (numberNodes_ - lastNodeImprovingFeasSol_ >=
-                                intParam_[CbcMaxNodesNotImproving])) ||
+          (numberSolutions_ &&
+	   (intParam_[CbcMaxNodesNotImproving] != COIN_INT_MAX && (numberNodes_ - lastNodeImprovingFeasSol_ >=
+		   intParam_[CbcMaxNodesNotImproving]))) ||
           (!(maximumNumberIterations_ < 0 ||
              numberIterations_ < maximumNumberIterations_)));
 }
@@ -19773,6 +19881,11 @@ void CbcModel::flipModel() {
   flipSolver(atSolutionSolver_, cutoff);
   flipSolver(continuousSolver_, cutoff);
   flipSolver(solver_, cutoff);
+  // flip interesting bit
+  if ((moreSpecialOptions2_&67108864)==0)
+    moreSpecialOptions2_ |= 67108864;
+  else
+    moreSpecialOptions2_ &= ~67108864;
 }
 #ifdef CBC_KEEP_DEPRECATED
 /* preProcess problem - replacing solver

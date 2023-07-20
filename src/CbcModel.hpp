@@ -20,7 +20,13 @@
 #ifndef CBC_OTHER_SOLVER
 #include "OsiClpSolverInterface.hpp"
 #endif
-
+// ints for some counts - which should really be long ints
+#define CBC_FEW_NODE_COUNTS
+#ifndef CBC_FEW_NODE_COUNTS
+typedef long int node_count;
+#else
+typedef int node_count; 
+#endif
 class CbcCutGenerator;
 class CbcBaseModel;
 class OsiRowCut;
@@ -104,7 +110,8 @@ class CBCLIB_EXPORT CbcModel {
 
 public:
   enum CbcIntParam {
-    /** The maximum number of nodes before terminating */
+    /** The maximum number of nodes before terminating.
+     If INT_MAX then not checked (to allow long runs!) */
     CbcMaxNumNode = 0,
     /** The maximum number of solutions before terminating */
     CbcMaxNumSol,
@@ -1084,7 +1091,7 @@ public:
   /// Solution limit reached?
   bool isSolutionLimitReached() const;
   /// Get how many iterations it took to solve the problem.
-  inline int getIterationCount() const
+  inline node_count getIterationCount() const
   {
     return numberIterations_;
   }
@@ -1094,7 +1101,7 @@ public:
     numberIterations_ += value;
   }
   /// Get how many Nodes it took to solve the problem (including those in complete fathoming B&B inside CLP).
-  inline int getNodeCount() const
+  inline node_count getNodeCount() const
   {
     return numberNodes_;
   }
@@ -1104,12 +1111,12 @@ public:
     numberNodes_ += value;
   }
   /// Get how many Nodes were enumerated in complete fathoming B&B inside CLP
-  inline int getExtraNodeCount() const
+  inline node_count getExtraNodeCount() const
   {
     return numberExtraNodes_;
   }
   /// Get how many times complete fathoming B&B was done
-  inline int getFathomCount() const
+  inline node_count getFathomCount() const
   {
     return numberFathoms_;
   }
@@ -1202,6 +1209,11 @@ public:
   inline int numberIntegers() const
   {
     return numberIntegers_;
+  }
+  /// Set number of integers in problem to zero to force refresh
+  inline void clearIntegers()
+  {
+    numberIntegers_ = 0;
   }
   // Integer variables
   inline const int *integerVariable() const
@@ -1484,6 +1496,27 @@ public:
   inline const double *getRowActivity() const
   {
     return solver_->getRowActivity();
+  }
+
+  /// Return true if model flipped to make minimize (for printing)
+  inline bool modelFlipped() const
+  {
+    return (moreSpecialOptions2_&67108864)!=0;
+  }
+  /// Return objective function value with sign corrected
+  inline double trueObjValue(double value) const
+  {
+    return (moreSpecialOptions2_&67108864)==0 ? value : -value;
+  }
+  inline double trueBestObjValue() const
+  {
+    return (moreSpecialOptions2_&67108864)==0 ? bestObjective_ : -bestObjective_;
+  }
+  /// Return cutoff value with sign corrected
+  inline double trueCutoff() const
+  {
+    return (moreSpecialOptions2_&67108864)==0 ?
+      dblParam_[CbcCurrentCutoff] : -dblParam_[CbcCurrentCutoff]; 
   }
 
   /// Get current objective function value
@@ -2091,6 +2124,8 @@ public:
 	24 bit (16777216) - just get feasible if no cutoff
 	25 bit (33554432) - feasibility pump after root cuts
 	26 bit (67108864) - child model but going for complete search
+	27 bit (134217728) - extra extra options
+	28 bit (268435456) - more of above2
     */
   inline void setSpecialOptions(int value)
   {
@@ -2669,12 +2704,12 @@ public:
     return &randomNumberGenerator_;
   }
   /// Set the number of iterations done in strong branching.
-  inline void setNumberStrongIterations(int number)
+  inline void setNumberStrongIterations(node_count number)
   {
     numberStrongIterations_ = number;
   }
   /// Get the number of iterations done in strong branching.
-  inline int numberStrongIterations() const
+  inline node_count numberStrongIterations() const
   {
     return numberStrongIterations_;
   }
@@ -2945,7 +2980,11 @@ private:
   /// Number of heuristic solutions
   int numberHeuristicSolutions_;
   /// Cumulative number of nodes
-  int numberNodes_;
+  node_count numberNodes_;
+#ifndef CBC_FEW_NODE_COUNTS
+  /// Cumulative number of branches
+  node_count numberBranches_;
+#endif
   /// Last node where a better feasible solution was found
   int lastNodeImprovingFeasSol_;
   /// Last time when a better feasible solution was found
@@ -2953,11 +2992,11 @@ private:
   /** Cumulative number of nodes for statistics.
         Must fix to match up
     */
-  int numberNodes2_;
+  node_count numberNodes2_;
   /// Cumulative number of iterations
-  int numberIterations_;
+  node_count numberIterations_;
   /// Cumulative number of solves
-  int numberSolves_;
+  node_count numberSolves_;
   /// Status of problem - 0 finished, 1 stopped, 2 difficulties
   int status_;
   /** Secondary status of problem
@@ -3110,6 +3149,7 @@ private:
 	21 bit 2097152 - analyze changed priorities but were equal before
 	22 bit 4194304 - ignore cutoff increment in multiple root solvers
 	23 bit (8388608) - no crunch
+	24 bit (67108864) - model has been flipped
     */
   int moreSpecialOptions2_;
   /// User node comparison function
@@ -3250,11 +3290,11 @@ private:
         should be kept for each cut and type of cut */
   int numberGlobalViolations_;
   /// Number of extra iterations in fast lp
-  int numberExtraIterations_;
+  node_count numberExtraIterations_;
   /// Number of extra nodes in fast lp
-  int numberExtraNodes_;
+  node_count numberExtraNodes_;
   /// Number of times fast lp entered
-  int numberFathoms_;
+  node_count numberFathoms_;
   /** Value of objective at continuous
         (Well actually after initial round of cuts)
     */

@@ -1079,11 +1079,12 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
           const int *originalColumns = process.originalColumns();
           CoinSet *setInfo = const_cast< CoinSet * >(clpSolver->setInfo());
           int numberSOS = clpSolver->numberSOS();
+	  CbcObject ** objects = new CbcObject * [numberSOS];
           for (int iSOS = 0; iSOS < numberSOS; iSOS++) {
-            //int type = setInfo[iSOS].setType();
+            int type = setInfo[iSOS].setType();
             int n = setInfo[iSOS].numberEntries();
-            int *which = setInfo[iSOS].modifiableWhich();
-            double *weights = setInfo[iSOS].modifiableWeights();
+            int *which = CoinCopyOfArray(setInfo[iSOS].which(),n);
+            double *weights = CoinCopyOfArray(setInfo[iSOS].weights(),n);
             int n2 = 0;
             for (int j = 0; j < n; j++) {
               int iColumn = which[j];
@@ -1098,7 +1099,15 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
               }
             }
             setInfo[iSOS].setNumberEntries(n2);
+	    objects[iSOS] = new CbcSOS(&model,n2,which,weights,iSOS,type);
+	    delete [] which;
+	    delete [] weights;
           }
+	  model.clearIntegers(); // so will refresh correctly
+	  model.addObjects(numberSOS,objects);
+          for (int iSOS = 0; iSOS < numberSOS; iSOS++)
+	    delete objects[iSOS];
+	  delete [] objects;
         }
 #endif
         if (numberNodes >= 0) {
@@ -1214,6 +1223,7 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
 	    specialOptions &= ~(2048|32768);
           // but say we are doing full search
           model.setSpecialOptions(specialOptions | 67108864);
+          saveModelOptions  &= (~32768); // don't do twice!
           bool takeHint;
           OsiHintStrength strength;
           // Switch off printing if asked to
@@ -1426,7 +1436,7 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
             value *= solver3->getObjSense();
             model.setCutoff(value);
             sprintf(generalPrint, "Unable to insert previous solution - using cutoff of %g",
-              value);
+		    trueObjValue(value));
             model_->messageHandler()->message(CBC_FPUMP1, model_->messages())
               << generalPrint
               << CoinMessageEol;
@@ -1812,9 +1822,11 @@ CbcHeuristicNode::distance(const CbcHeuristicNode *node) const
   const double disjointWeight = 1;
   const double overlapWeight = 0.4;
   const double subsetWeight = 0.2;
+#ifdef COIN_DETAIL
   int countDisjointWeight = 0;
   int countOverlapWeight = 0;
   int countSubsetWeight = 0;
+#endif
   int i = 0;
   int j = 0;
   double dist = 0.0;
@@ -1846,11 +1858,15 @@ CbcHeuristicNode::distance(const CbcHeuristicNode *node) const
     const int brComp = compare3BranchingObjects(br0, br1);
     if (brComp < 0) {
       dist += subsetWeight;
+#ifdef COIN_DETAIL
       countSubsetWeight++;
+#endif
       ++i;
     } else if (brComp > 0) {
       dist += subsetWeight;
+#ifdef COIN_DETAIL
       countSubsetWeight++;
+#endif
       ++j;
     } else {
       const int comp = br0->compareBranchingObject(br1, false);
@@ -1860,16 +1876,22 @@ CbcHeuristicNode::distance(const CbcHeuristicNode *node) const
         break;
       case CbcRangeDisjoint: // disjoint decisions
         dist += disjointWeight;
+#ifdef COIN_DETAIL
         countDisjointWeight++;
+#endif
         break;
       case CbcRangeSubset: // subset one way or another
       case CbcRangeSuperset:
         dist += subsetWeight;
+#ifdef COIN_DETAIL
         countSubsetWeight++;
+#endif
         break;
       case CbcRangeOverlap: // overlap
         dist += overlapWeight;
+#ifdef COIN_DETAIL
         countOverlapWeight++;
+#endif
         break;
       }
       ++i;
@@ -1877,7 +1899,9 @@ CbcHeuristicNode::distance(const CbcHeuristicNode *node) const
     }
   }
   dist += subsetWeight * (numObjects_ - i + node->numObjects_ - j);
+#ifdef COIN_DETAIL
   countSubsetWeight += (numObjects_ - i + node->numObjects_ - j);
+#endif
   COIN_DETAIL_PRINT(printf("subset = %i, overlap = %i, disjoint = %i\n", countSubsetWeight,
     countOverlapWeight, countDisjointWeight));
   return dist;
