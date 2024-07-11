@@ -256,11 +256,12 @@ struct Cbc_Model {
   /* space to query conflict graph */
   size_t cg_space;
   size_t *cg_neighs;
-  bool *cg_iv;
+  char *cg_iv;
 
   // parameters
   enum LPMethod lp_method;
   enum DualPivot dualp;
+  enum LPReductions red_type = LPR_Default;
 
   // lazy constraints
   CglStored *lazyConstrs;
@@ -1763,7 +1764,7 @@ static void Cbc_addAllSOS( Cbc_Model *model, CbcModel &cbcModel );
 static void Cbc_addMS( Cbc_Model *model, CbcModel &cbcModel  );
 
 int CBC_LINKAGE
-Cbc_solveLinearProgram(Cbc_Model *model) 
+Cbc_solveLinearProgram(Cbc_Model *model)
 {
   Cbc_flush( model );
   OsiClpSolverInterface *solver = model->solver_;
@@ -1909,6 +1910,10 @@ Cbc_solveLinearProgram(Cbc_Model *model)
 
   /* for integer or linear optimization starting with LP relaxation */
   ClpSolve clpOptions;
+  if (model->red_type == LPR_NoDualReds){
+    // set special option in Clp to disable dual reductions
+    clpOptions.setSpecialOption(5, 1);
+  }
   char methodName[256] = "";
   switch (model->lp_method) {
     case LPM_Auto:
@@ -2371,7 +2376,58 @@ Cbc_solve(Cbc_Model *model)
           inputQueue.push_back(ss.str());
         }
       }
-
+      // add in from options file
+      if (getenv("COIN_CBC_OPTIONS")) {
+	FILE * fp =fopen(getenv("COIN_CBC_OPTIONS"),"r");
+	if (fp) {
+	  char line[512];
+	  int logLevel = Cbc_getLogLevel(model);
+	  if (logLevel)
+	    printf("Adding options from file %s\n",getenv("COIN_CBC_OPTIONS"));
+	  while (fgets(line, 200, fp)) {
+	    // skip comment
+	    if (line[0]=='*')
+	      continue;
+	    int nchar = strlen(line);
+	    if (nchar<2)
+	      continue;
+	    if (line[0]!='-') {
+	      memmove(line+1,line,nchar+1);
+	      nchar++;
+	      line[0]='-';
+	    }
+	    char *pos=line;
+	    char *put=line;
+	    while (true) {
+	      while (*pos != '\n' && *pos != '\0'
+		     && *pos != ' ' && *pos != '\t') 
+		pos++;
+	      char save = *pos;
+	      *pos = '\0';
+	      if (strlen(put)) {
+		inputQueue.push_back(put);
+		if (logLevel)
+		  std::cout << put << " ";
+	      }
+	      if (save == ' ' || save == '\t') {
+		pos++;
+		while (*pos == ' ' || *pos == '\t')
+		  pos++;
+		put = pos;
+	      } else {
+		break; // end of line
+	      }
+	    }
+	  }
+	  if (logLevel)
+	    std::cout << std::endl;
+	  fclose(fp);
+	} else {
+	  fprintf(stderr, "Unable to open COIN_CBC_OPTIONS file %s\n",
+		  getenv("COIN_CBC_OPTIONS")); 
+	  fflush(stderr);			
+	}
+      }
       inputQueue.push_back("-solve");
       inputQueue.push_back("-quit");
 
@@ -4018,8 +4074,8 @@ CGNeighbors CBC_LINKAGE CG_conflictingNodes(Cbc_Model *model, void *cgraph, size
     model->cg_space = Cbc_getNumCols(model)*2;
 
     model->cg_neighs  = (size_t *) xmalloc( sizeof(size_t)*model->cg_space );
-    model->cg_iv  = (bool *) xmalloc( sizeof(bool)*model->cg_space );
-    memset(model->cg_iv, 0, sizeof(bool)*model->cg_space);
+    model->cg_iv  = (char *) xmalloc( sizeof(char)*model->cg_space );
+    memset(model->cg_iv, 0, sizeof(char)*model->cg_space);
   }
 
   const CoinStaticConflictGraph *cg = (CoinStaticConflictGraph *)cgraph;
@@ -4692,6 +4748,21 @@ Cbc_setCutoff(Cbc_Model* model, double cutoff)
 void CBC_LINKAGE
 Cbc_setLPmethod(Cbc_Model *model, enum LPMethod lpm ) {
   model->lp_method = lpm;
+}
+
+/** gets the dual reductions to be used when solving the LP
+ */
+double CBC_LINKAGE
+Cbc_getDualReductionsType(Cbc_Model *model){
+  return model->red_type;
+}
+
+/** sets the dual reductions to be used when solving the LP
+ */
+
+void CBC_LINKAGE
+Cbc_setDualReductionsType(Cbc_Model *model, enum LPReductions red) {
+  model->red_type = red;
 }
 
 

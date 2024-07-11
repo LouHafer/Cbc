@@ -218,8 +218,8 @@ int CbcMipStartIO::computeCompleteSolution(CbcModel *model, OsiSolverInterface *
 
   // assuming that variables not fixed are more likely to have zero as value,
   // inserting as default objective function 1
-  {
-    vector< double > obj(lp->getNumCols(), 1.0);
+  if (0) { // to get more accurate answers
+    vector< double > obj(lp->getNumCols(), lp->getObjSense());
     lp->setObjective(&obj[0]);
   }
 
@@ -302,10 +302,23 @@ int CbcMipStartIO::computeCompleteSolution(CbcModel *model, OsiSolverInterface *
   if (extraActions)
     fixed = lp->getNumIntegers();
   if (!fixed) {
-    messHandler->message(CBC_GENERAL, messages)
-      << "Warning: MIPstart solution is not valid, column names do not match, ignoring it."
-      << CoinMessageEol;
-    goto TERMINATE;
+    // but might be SOS
+    if (model) {
+      int numberObjects = model->numberObjects();
+      for (int i = 0; i < numberObjects; i++) {
+	const CbcSOS *object = dynamic_cast< const CbcSOS * >(model->object(i));
+	if (object) {
+	  fixed=1;
+	  break; // SOS assume user is expert
+	}
+      }
+    }
+    if (!fixed) {
+      messHandler->message(CBC_GENERAL, messages)
+	<< "Warning: MIPstart solution is not valid, column names do not match, ignoring it."
+	<< CoinMessageEol;
+      goto TERMINATE;
+    }
   }
 
   if (notFound >= ((static_cast< double >(colNames.size())) * 0.5)) {
@@ -317,7 +330,7 @@ int CbcMipStartIO::computeCompleteSolution(CbcModel *model, OsiSolverInterface *
   lp->setHintParam(OsiDoPresolveInInitial, true, OsiHintDo);
 #endif
 
-  lp->setDblParam(OsiDualObjectiveLimit, COIN_DBL_MAX);
+  //lp->setDblParam(OsiDualObjectiveLimit, COIN_DBL_MAX);
   lp->initialSolve();
 
   if ((lp->isProvenPrimalInfeasible()) || (lp->isProvenDualInfeasible())) {

@@ -303,7 +303,7 @@ bool CbcHeuristic::shouldHeurRun(int whereFrom)
     // Very large howOftenShallow_ will give the original test:
     // (model_->getCurrentPassNumber() != 1)
     //    if ((numInvocationsInShallow_ % howOftenShallow_) != 1) {
-    if ((numInvocationsInShallow_ % howOftenShallow_) != 0) {
+    if (howOftenShallow_ && (numInvocationsInShallow_ % howOftenShallow_) != 0) {
       return false;
     }
     // LL: should we save these nodes in the list of nodes where the heur was
@@ -631,7 +631,7 @@ bool CbcHeuristic::exitNow(double bestObjective) const
   }
   // See if can stop on gap
   OsiSolverInterface *solver = model_->solver();
-  double bestPossibleObjective = solver->getObjValue() * solver->getObjSense();
+  double bestPossibleObjective = solver->getObjValue() * solver->getObjSenseInCbc();
   double absGap = CoinMax(model_->getAllowableGap(),
     model_->getHeuristicGap());
   double fracGap = CoinMax(model_->getAllowableFractionGap(),
@@ -915,7 +915,7 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
   solver->getHintParam(OsiDoReducePrint, takeHint, strength);
   solver->setHintParam(OsiDoReducePrint, true, OsiHintTry);
   solver->setHintParam(OsiDoPresolveInInitial, false, OsiHintTry);
-  double signedCutoff = cutoff * solver->getObjSense();
+  double signedCutoff = cutoff * solver->getObjSenseInCbc();
   solver->setDblParam(OsiDualObjectiveLimit, signedCutoff);
   solver->initialSolve();
   if (solver->isProvenOptimal()) {
@@ -1297,7 +1297,7 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
                             4 and static continuous, 5 as 3 but no internal integers
                             6 as 3 but all slack basis!
                             */
-              double value = solver2->getObjSense() * solver2->getObjValue();
+              double value = solver2->getObjSenseInCbc() * solver2->getObjValue();
               int w = pumpTune / 10;
               int ix = w % 10;
               w /= 10;
@@ -1423,17 +1423,17 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
           if (solver3->isProvenOptimal()) {
             // good
             CbcSerendipity heuristic(model);
-            double value = solver3->getObjSense() * solver3->getObjValue();
+            double value = solver3->getObjSenseInCbc() * solver3->getObjValue();
             heuristic.setInputSolution(solver3->getColSolution(), value);
             value = value + 1.0e-7 * (1.0 + fabs(value));
-            value *= solver3->getObjSense();
+            value *= solver3->getObjSenseInCbc();
             model.setCutoff(value);
             model.addHeuristic(&heuristic, "Previous solution", 0);
             //printf("added seren\n");
           } else {
             double value = model_->getMinimizationObjValue();
             value = value + 1.0e-7 * (1.0 + fabs(value));
-            value *= solver3->getObjSense();
+            value *= solver3->getObjSenseInCbc();
             model.setCutoff(value);
             sprintf(generalPrint, "Unable to insert previous solution - using cutoff of %g",
 		    trueObjValue(value));
@@ -1520,11 +1520,10 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
             for (int iGenerator = 0; iGenerator < model.numberCutGenerators(); iGenerator++) {
               CbcCutGenerator *generator = model.cutGenerator(iGenerator);
               sprintf(generalPrint,
-                "%s was tried %d times and created %d cuts of which %d were active after adding rounds of cuts (%.3f seconds)",
+                "%s was tried %d times and created %d cuts (%.3f seconds)",
                 generator->cutGeneratorName(),
                 generator->numberTimesEntered(),
                 generator->numberCutsInTotal() + generator->numberColumnCuts(),
-                generator->numberCutsActive(),
                 generator->timeInCutGenerator());
               CglStored *stored = dynamic_cast< CglStored * >(generator->generator());
               if (stored && !generator->numberCutsInTotal())
@@ -1541,7 +1540,7 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
           }
         } else {
           // empty model
-          model.setMinimizationObjValue(model.solver()->getObjSense() * model.solver()->getObjValue());
+          model.setMinimizationObjValue(model.solver()->getObjSenseInCbc() * model.solver()->getObjValue());
         }
         if (logLevel > 1)
           model_->messageHandler()->message(CBC_END_SUB, model_->messages())
@@ -1565,7 +1564,7 @@ int CbcHeuristic::smallBranchAndBound(OsiSolverInterface *solver, int numberNode
 	  setPreProcessingMode(model.solver(),2);
           process.postProcess(*model.solver());
 	  setPreProcessingMode(solver,0);
-          if (solver->isProvenOptimal() && solver->getObjValue() * solver->getObjSense() < cutoff) {
+          if (solver->isProvenOptimal() && solver->getObjValue() * solver->getObjSenseInCbc() < cutoff) {
             // Solution now back in solver
             int numberColumns = solver->getNumCols();
             memcpy(newSolution, solver->getColSolution(),
@@ -1753,6 +1752,12 @@ void CbcHeuristicNode::gutsOfConstructor(CbcModel &model)
 {
   //  CbcHeurDebugNodes(&model);
   CbcNode *node = model.currentNode();
+  if (!node) {
+    // at root
+    brObj_ = NULL;
+    numObjects_ = 0;
+    return;
+  }
   brObj_ = new CbcBranchingObject *[node->depth()];
   CbcNodeInfo *nodeInfo = node->nodeInfo();
   int cnt = 0;
@@ -2111,7 +2116,7 @@ int CbcRounding::solution(double &solutionValue,
     heuristicName(), numRuns_, numCouldRun_, when_);
 #endif
   OsiSolverInterface *solver = model_->solver();
-  double direction = solver->getObjSense();
+  double direction = solver->getObjSenseInCbc();
   double newSolutionValue = direction * solver->getObjValue();
   return solution(solutionValue, betterSolution, newSolutionValue);
 }
@@ -2149,7 +2154,7 @@ int CbcRounding::solution(double &solutionValue,
   int numberIntegers = model_->numberIntegers();
   const int *integerVariable = model_->integerVariable();
   int i;
-  double direction = solver->getObjSense();
+  double direction = solver->getObjSenseInCbc();
   //double newSolutionValue = direction*solver->getObjValue();
   int returnCode = 0;
   // Column copy
@@ -2712,7 +2717,9 @@ int CbcRounding::solution(double &solutionValue,
           move = -1.0;
         else if (cost < 0.0)
           move = 1.0;
-        while (move) {
+	int times=20;
+        while (move && times) {
+	  times--;
           bool good = true;
           double newValue = newSolution[iColumn] + move;
           if (newValue < lower[iColumn] - useTolerance || newValue > upper[iColumn] + useTolerance) {

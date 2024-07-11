@@ -1009,6 +1009,7 @@ void CbcMain0(CbcModel &model, CbcParameters &parameters) {
   parameters[CbcParam::ODDWHEELCUTS]->setVal("ifmove");
   parameters[CbcParam::CLQSTRENGTHENING]->setVal("after");
   parameters[CbcParam::USECGRAPH]->setVal("on");
+  parameters[CbcParam::AGGREGATEMIXED]->setVal(1);
   parameters[CbcParam::BKPIVOTINGSTRATEGY]->setVal(3);
   parameters[CbcParam::BKMAXCALLS]->setVal(1000);
   parameters[CbcParam::BKCLQEXTMETHOD]->setVal(4);
@@ -1090,6 +1091,15 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
   std::ostringstream buffer;
   std::string field, message, fileName;
   FILE *fp;
+#ifdef DEBUG_CBC_PYTHON
+  // Probably being stupid but finding it difficult to debug from python
+  static int startedPython=0;
+  if (!startedPython) {
+    printf("debug python:");
+    getchar();
+    startedPython=1;
+  }
+#endif
 
   double totalTime = parameters.getTotalTime();
   bool useSignalHandler = parameters.useSignalHandler();
@@ -1437,6 +1447,7 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
     CglMixedIntegerRounding2 mixedGen(1, true, 1);
     // set default action (0=off,1=on,2=root,3=ifmove)
     int mixedMode = CbcParameters::CGIfMove;
+    int mixedRoundStrategy = 1; 
     assert (parameters[CbcParam::MIRCUTS]->modeVal()==mixedMode);
     mixedGen.setDoPreproc(1); // safer (and better)
 
@@ -1644,7 +1655,9 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
 		     if (nchar<2)
 		       continue;
 		     if (line[0]!='-') {
-		       memmove(line+1,line,nchar+1);
+		       for (int i=nchar;i>=0;i--)
+			 line[i+1] = line[i];
+		       //memmove(line+1,line,nchar+1);
 		       nchar++;
 		       line[0]='-';
 		     }
@@ -2189,6 +2202,8 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
               } else if (cbcParamCode == CbcParam::FPUMPTUNE || cbcParamCode == CbcParam::FPUMPTUNE2 ||
                          cbcParamCode == CbcParam::FPUMPITS) {
                  pumpChanged = true;
+              } else if (cbcParamCode == CbcParam::AGGREGATEMIXED) {
+                 mixedRoundStrategy = iValue;
               } else if (cbcParamCode == CbcParam::BKPIVOTINGSTRATEGY) {
                  bkPivotingStrategy = iValue;
               } else if (cbcParamCode == CbcParam::BKMAXCALLS) {
@@ -2310,7 +2325,7 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                     buffer.str("");
                     buffer << "switching on global root cuts for gomory and "
                            << "knapsack" << std::endl;
-                    buffer << "using OSL factorization" << std::endl;
+                    //buffer << "using OSL factorization" << std::endl;
                     buffer << "extra options - -rens on -extra4 " << extra4
                            << " -passc 1000!" << std::endl;
                     printGeneralMessage(model_, buffer.str());
@@ -2321,7 +2336,7 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                     parameters[CbcParam::KNAPSACKCUTS]->setVal("onGlobal");
                     knapsackMode = CbcParameters::CGOnGlobal;
                     clpParameters[ClpParam::FACTORIZATION]->setVal("osl");
-                    lpSolver->factorization()->forceOtherFactorization(3);
+                    //lpSolver->factorization()->forceOtherFactorization(3);
                     parameters[CbcParam::MAXHOTITS]->setVal(100);
                     parameters[CbcParam::CUTPASS]->setVal(1000);
                     cutPass = 1000;
@@ -3487,152 +3502,6 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
             if (deleteModel2)
                delete model2;
            } break;
-          case CbcParam::DOHEURISTIC:{
-            if (!goodModel){
-               continue;
-            }
-#if CBC_USE_INITIAL_TIME == 1
-            if (model_.useElapsedTime())
-               model_.setDblParam(CbcModel::CbcStartSeconds,
-                                  CoinGetTimeOfDay());
-            else
-               model_.setDblParam(CbcModel::CbcStartSeconds, CoinCpuTime());
-#endif
-            int vubMode = parameters[CbcParam::VUBTRY]->intVal();
-            if (vubMode != -1) {
-               // look at vubs
-               // extra1 is number of ints to leave free
-               // Just ones which affect >= extra3
-               int extra3 = parameters[CbcParam::EXTRA3]->intVal();
-               /* 2 is cost above which to fix if feasible
-                  3 is fraction of integer variables fixed if
-                  relaxing (0.97) 4 is fraction of all variables fixed if
-                  relaxing (0.0)
-               */
-               double dextra[6];
-               int extra[5];
-               extra[1] = parameters[CbcParam::EXTRA1]->intVal();
-               int exp1 = parameters[CbcParam::EXPERIMENT]->intVal();
-               if (exp1 == 4 && extra[1] == -1)
-                  extra[1] = 999998;
-               dextra[1] = parameters[CbcParam::FAKEINCREMENT]->dblVal();
-               dextra[2] = parameters[CbcParam::FAKECUTOFF]->dblVal();
-               dextra[3] = parameters[CbcParam::DEXTRA3]->dblVal();
-               dextra[4] = parameters[CbcParam::DEXTRA4]->dblVal();
-               dextra[5] = parameters[CbcParam::DEXTRA5]->dblVal();
-               if (!dextra[3])
-                  dextra[3] = 0.97;
-               // OsiClpSolverInterface * newSolver =
-               fixVubs(model_, extra3, vubMode, generalMessageHandler,
-                       debugValues, dextra, extra);
-               // assert (!newSolver);
-            }
-            // Actually do heuristics
-            // may need to flip objective
-            bool needFlip = model_.solver()->getObjSense() < 0.0;
-            if (needFlip)
-               model_.flipModel();
-            // if we do then - fix priorities in
-            // clonebutmodel_.convertToDynamic();
-            bool objectsExist = model_.objects() != NULL;
-            if (!objectsExist) {
-               model_.findIntegers(false);
-               model_.convertToDynamic();
-            }
-            // set priorities etc
-            if (priorities) {
-               OsiObject **objects = model_.objects();
-               int numberObjects = model_.numberObjects();
-               for (int iObj = 0; iObj < numberObjects; iObj++) {
-                  CbcSimpleInteger *obj =
-                     dynamic_cast<CbcSimpleInteger *>(objects[iObj]);
-                  if (!obj)
-                     continue;
-                  int iColumn = obj->columnNumber();
-                  if (branchDirection) {
-                     obj->setPreferredWay(branchDirection[iColumn]);
-                  }
-                  if (priorities) {
-                     int iPriority = priorities[iColumn];
-                     if (iPriority > 0)
-                        obj->setPriority(iPriority);
-                  }
-                  if (pseudoUp && pseudoUp[iColumn]) {
-                     CbcSimpleIntegerPseudoCost *obj1a =
-                        dynamic_cast<CbcSimpleIntegerPseudoCost *>(
-                            objects[iObj]);
-                    assert(obj1a);
-                    if (pseudoDown[iColumn] > 0.0)
-                       obj1a->setDownPseudoCost(pseudoDown[iColumn]);
-                    if (pseudoUp[iColumn] > 0.0)
-                       obj1a->setUpPseudoCost(pseudoUp[iColumn]);
-                  }
-               }
-            }
-            doHeuristics(&model_, 2, parameters, parameters.noPrinting(),
-                         initialPumpTune);
-            if (!objectsExist) {
-               model_.deleteObjects(false);
-            }
-            if (needFlip)
-               model_.flipModel();
-            if (model_.bestSolution()) {
-               model_.setProblemStatus(1);
-               model_.setSecondaryStatus(6);
-               if (statusUserFunction_[0] && info) {
-                  double value = model_.getObjValue();
-                  char buf[300];
-                  int pos = 0;
-                  pos += sprintf(buf + pos, "feasible,");
-                  info->problemStatus = 0;
-                  info->objValue = value;
-                  pos += sprintf(buf + pos, " objective %.*g", ampl_obj_prec(),
-                                 value);
-                  sprintf(buf + pos, "\n0 iterations");
-                  free(info->primalSolution);
-                  int numberColumns = lpSolver->numberColumns();
-                  info->primalSolution = reinterpret_cast<double *>(
-                      malloc(numberColumns * sizeof(double)));
-                  CoinCopyN(model_.bestSolution(), numberColumns,
-                            info->primalSolution);
-                  int numberRows = lpSolver->numberRows();
-                  free(info->dualSolution);
-                  info->dualSolution = reinterpret_cast<double *>(
-                      malloc(numberRows * sizeof(double)));
-                  CoinZeroN(info->dualSolution, numberRows);
-                  CoinWarmStartBasis *basis = lpSolver->getBasis();
-                  free(info->rowStatus);
-                  info->rowStatus =
-                      reinterpret_cast<int *>(malloc(numberRows * sizeof(int)));
-                  free(info->columnStatus);
-                  info->columnStatus = reinterpret_cast<int *>(
-                      malloc(numberColumns * sizeof(int)));
-                  // Put basis in
-                  int i;
-                  // free,basic,ub,lb are 0,1,2,3
-                  for (i = 0; i < numberRows; i++) {
-                    CoinWarmStartBasis::Status status =
-                        basis->getArtifStatus(i);
-                    info->rowStatus[i] = status;
-                  }
-                  for (i = 0; i < numberColumns; i++) {
-                    CoinWarmStartBasis::Status status =
-                        basis->getStructStatus(i);
-                    info->columnStatus[i] = status;
-                  }
-                  // put buffer into info
-                  strcpy(info->buffer, buf);
-                  delete basis;
-               }
-            }
-            int returnCode = callBack(&model, 6);
-            if (returnCode) {
-               // exit if user wants
-               delete babModel_;
-               babModel_ = NULL;
-               return returnCode;
-            }
-          }break;
           case CbcParam::MIPLIB:
             // User can set options - main difference is lack of model and
             // CglPreProcess
@@ -3656,6 +3525,13 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
               double *truncatedRhsLower = NULL;
               double *truncatedRhsUpper = NULL;
               int *newPriorities = NULL;
+	      if (model_.solver()->getObjSense()==-1.0) {
+		// If cutoff set flip
+		if (model_.getCutoff()<1.0e30) {
+		  double cutoff = model_.getCutoff();
+		  model_.setCutoff(-cutoff);
+		}
+	      }
               // Reduce printout
               if (logLevel <= 1) {
                 model_.solver()->setHintParam(OsiDoReducePrint, true,
@@ -4365,6 +4241,153 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                   model_.setSolutionCount(1);
                 }
               }
+	      // Do heuristics if asked for
+	      //HEURSTART
+ 	      // Do heuristics if asked for
+	      if (parameters[CbcParam::DOHEURISTIC]->modeVal()) {
+#if CBC_USE_INITIAL_TIME == 1
+		if (model_.useElapsedTime())
+		  model_.setDblParam(CbcModel::CbcStartSeconds,
+				     CoinGetTimeOfDay());
+		else
+		  model_.setDblParam(CbcModel::CbcStartSeconds, CoinCpuTime());
+#endif
+		int vubMode = parameters[CbcParam::VUBTRY]->intVal();
+		if (vubMode != -1) {
+		  // look at vubs
+		  // extra1 is number of ints to leave free
+		  // Just ones which affect >= extra3
+		  int extra3 = parameters[CbcParam::EXTRA3]->intVal();
+		  /* 2 is cost above which to fix if feasible
+		     3 is fraction of integer variables fixed if
+		     relaxing (0.97) 4 is fraction of all variables fixed if
+		     relaxing (0.0)
+		  */
+		  double dextra[6];
+		  int extra[5];
+		  extra[1] = parameters[CbcParam::EXTRA1]->intVal();
+		  int exp1 = parameters[CbcParam::EXPERIMENT]->intVal();
+		  if (exp1 == 4 && extra[1] == -1)
+		    extra[1] = 999998;
+		  dextra[1] = parameters[CbcParam::FAKEINCREMENT]->dblVal();
+		  dextra[2] = parameters[CbcParam::FAKECUTOFF]->dblVal();
+		  dextra[3] = parameters[CbcParam::DEXTRA3]->dblVal();
+		  dextra[4] = parameters[CbcParam::DEXTRA4]->dblVal();
+		  dextra[5] = parameters[CbcParam::DEXTRA5]->dblVal();
+		  if (!dextra[3])
+		    dextra[3] = 0.97;
+		  // OsiClpSolverInterface * newSolver =
+		  fixVubs(model_, extra3, vubMode, generalMessageHandler,
+			  debugValues, dextra, extra);
+		  // assert (!newSolver);
+		}
+		// Actually do heuristics
+		// may need to flip objective
+		bool needFlip = model_.solver()->getObjSense() < 0.0;
+		if (needFlip)
+		  model_.flipModel();
+		// if we do then - fix priorities in
+		// clonebutmodel_.convertToDynamic();
+		bool objectsExist = model_.objects() != NULL;
+		if (!objectsExist) {
+		  model_.findIntegers(false);
+		  model_.convertToDynamic();
+		}
+		// set priorities etc
+		if (priorities) {
+		  OsiObject **objects = model_.objects();
+		  int numberObjects = model_.numberObjects();
+		  for (int iObj = 0; iObj < numberObjects; iObj++) {
+		    CbcSimpleInteger *obj =
+		      dynamic_cast<CbcSimpleInteger *>(objects[iObj]);
+		    if (!obj)
+		      continue;
+		    int iColumn = obj->columnNumber();
+		    if (branchDirection) {
+		      obj->setPreferredWay(branchDirection[iColumn]);
+		    }
+		    if (priorities) {
+		      int iPriority = priorities[iColumn];
+		      if (iPriority > 0)
+                        obj->setPriority(iPriority);
+		    }
+		    if (pseudoUp && pseudoUp[iColumn]) {
+		      CbcSimpleIntegerPseudoCost *obj1a =
+                        dynamic_cast<CbcSimpleIntegerPseudoCost *>(
+								   objects[iObj]);
+		      assert(obj1a);
+		      if (pseudoDown[iColumn] > 0.0)
+			obj1a->setDownPseudoCost(pseudoDown[iColumn]);
+		      if (pseudoUp[iColumn] > 0.0)
+			obj1a->setUpPseudoCost(pseudoUp[iColumn]);
+		    }
+		  }
+		}
+		doHeuristics(&model_, 2, parameters, parameters.noPrinting(),
+			     initialPumpTune);
+		if (!objectsExist) {
+		  model_.deleteObjects(false);
+		}
+		if (needFlip)
+		  model_.flipModel();
+		if (model_.bestSolution()) {
+		  model_.setProblemStatus(1);
+		  model_.setSecondaryStatus(6);
+		  if (statusUserFunction_[0] && info) {
+		    double value = model_.getObjValue();
+		    char buf[300];
+		    int pos = 0;
+		    pos += sprintf(buf + pos, "feasible,");
+		    info->problemStatus = 0;
+		    info->objValue = value;
+		    pos += sprintf(buf + pos, " objective %.*g", ampl_obj_prec(),
+				   value);
+		    sprintf(buf + pos, "\n0 iterations");
+		    free(info->primalSolution);
+		    int numberColumns = lpSolver->numberColumns();
+		    info->primalSolution = reinterpret_cast<double *>(
+								      malloc(numberColumns * sizeof(double)));
+		    CoinCopyN(model_.bestSolution(), numberColumns,
+			      info->primalSolution);
+		    int numberRows = lpSolver->numberRows();
+		    free(info->dualSolution);
+		    info->dualSolution = reinterpret_cast<double *>(
+								    malloc(numberRows * sizeof(double)));
+		    CoinZeroN(info->dualSolution, numberRows);
+		    CoinWarmStartBasis *basis = lpSolver->getBasis();
+		    free(info->rowStatus);
+		    info->rowStatus =
+                      reinterpret_cast<int *>(malloc(numberRows * sizeof(int)));
+		    free(info->columnStatus);
+		    info->columnStatus = reinterpret_cast<int *>(
+								 malloc(numberColumns * sizeof(int)));
+		    // Put basis in
+		    int i;
+		    // free,basic,ub,lb are 0,1,2,3
+		    for (i = 0; i < numberRows; i++) {
+		      CoinWarmStartBasis::Status status =
+                        basis->getArtifStatus(i);
+		      info->rowStatus[i] = status;
+		    }
+		    for (i = 0; i < numberColumns; i++) {
+		      CoinWarmStartBasis::Status status =
+                        basis->getStructStatus(i);
+		      info->columnStatus[i] = status;
+		    }
+		    // put buffer into info
+		    strcpy(info->buffer, buf);
+		    delete basis;
+		  }
+		}
+		int returnCode = callBack(&model, 6);
+		if (returnCode) {
+		  // exit if user wants
+		  delete babModel_;
+		  babModel_ = NULL;
+		  return returnCode;
+		}
+	      }
+	      //HEUREND
               bool hasTimePreproc = !babModel_->maximumSecondsReached();
               if (!hasTimePreproc)
                 preProcess = 0;
@@ -4906,12 +4929,32 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                   const int *originalColumns = process.originalColumns();
                   int numberColumns =
                       CoinMin(solver2->getNumCols(), babModel_->getNumCols());
+#if 0		  
                   double *bestSolution = babModel_->bestSolution();
                   const double *oldBestSolution = model_.bestSolution();
                   for (int i = 0; i < numberColumns; i++) {
                     int jColumn = originalColumns[i];
                     bestSolution[i] = oldBestSolution[jColumn];
                   }
+#else
+		  int numberColumnsB = babModel_->getNumCols();
+                  int numberColumns2 =
+                      CoinMax(solver2->getNumCols(), numberColumnsB);
+                  double *bestSolution = new double [numberColumns2];
+		  memset(bestSolution,0,numberColumns2*sizeof(double));
+                  const double *oldBestSolution = model_.bestSolution();
+                  for (int i = 0; i < numberColumns; i++) {
+                    int jColumn = originalColumns[i];
+		    if (jColumn<numberColumnsB)
+		      bestSolution[i] = oldBestSolution[jColumn];
+                  }
+		  double obj=model_.getObjValue();
+                  double newCutoff =
+                      CoinMin(model_.getCutoff(), obj + 1.0e-4);
+		  babModel_->setBestSolution(bestSolution,numberColumns,1.0e10,false);
+                  babModel_->setCutoff(newCutoff);
+		  delete [] bestSolution;
+#endif
                 }
                 //solver2->resolve();
 #ifdef CBC_NAMES_FOR_COMPARE
@@ -6118,6 +6161,8 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
               }
  	      assert (parameters[CbcParam::MIRCUTS]->modeVal()==mixedMode);
               if (mixedMode) {
+		if (mixedRoundStrategy != 1)
+		  mixedGen.setMAXAGGR_(mixedRoundStrategy);
                 babModel_->addCutGenerator(&mixedGen, translate[mixedMode],
                                            "MixedIntegerRounding2");
                 accuracyFlag[numberGenerators] = 2;
@@ -6339,9 +6384,11 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
               double increment = babModel_->getCutoffIncrement();
               ;
               int *changed = NULL;
-              if (!miplib && increment == normalIncrement)
+#ifdef UNSAFE_FOR_LAZY_CUTS
+              if (!miplib && increment == normalIncrement) 
                 changed = analyze(osiclp, numberChanged, increment, false,
                                   generalMessageHandler, parameters.noPrinting());
+#endif
 #elif CBC_OTHER_SOLVER == 1
               double increment = babModel_->getCutoffIncrement();
               ;
@@ -6677,17 +6724,9 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
 		    /* But this is outside branchAndBound so needs to know 
 		       about direction */
 		    if (babModel_->getObjSense()==-1.0) {
-		      double increment = obj-babModel_->getCutoff();
-		      babModel_->setCutoff(-obj-increment);
+		      babModel_->setCutoff(-obj);
 		      babModel_->setMinimizationObjValue(-obj);
 		    }
-                    /* But this is outside branchAndBound so needs to know
-                       about direction */
-                    if (babModel_->getObjSense() == -1.0) {
-                      double increment = obj - babModel_->getCutoff();
-                      babModel_->setCutoff(-obj - increment);
-                      babModel_->setMinimizationObjValue(-obj);
-                    }
                     babModel_->clearContinuousSolver();
                     babModel_->passInSolverCharacteristics(NULL);
                     if (useSolution == 0)
@@ -7744,13 +7783,16 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                 if ((experimentFlag >= 1 || strategyFlag >= 1) &&
                     abs(babModel_->fastNodeDepth()) == 1) {
 		  int iType = babModel_->fastNodeDepth();
-		  int iDepth = iType <0 ? -12 : 8;
+		  int iDepth = iType <0 ? -12 : 5;
 		  int iSize = 500; // think harder iType <0 ? 10000 : 500; 
                   if (babModel_->solver()->getNumCols() +
                           babModel_->solver()->getNumRows() < iSize) {
                     babModel_->setFastNodeDepth(iDepth);
 		  } else {
-                    babModel_->setFastNodeDepth(-1); // not sure about when +1
+ 		    if (iDepth==-12)
+		      babModel_->setFastNodeDepth(-1);
+		    else
+		      babModel_->setFastNodeDepth(8);
 		  }
                 } else if (babModel_->fastNodeDepth() == -999) {
                   babModel_->setFastNodeDepth(-1);
@@ -8622,9 +8664,7 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                   buffer << generator->cutGeneratorName() << " was tried "
                          << generator->numberTimesEntered() << " times and created "
                          << generator->numberCutsInTotal() + generator->numberColumnCuts()
-                         << " cuts of which "
-                         << generator->numberCutsActive()
-                         << " were active after adding rounds of cuts";
+                         << " cuts";
                   if (generator->timing()) {
                      buffer << " (" << generator->timeInCutGenerator() <<  " seconds)";
                      statistics_cut_time += generator->timeInCutGenerator();
@@ -8879,11 +8919,13 @@ int CbcMain1(std::deque<std::string> inputQueue, CbcModel &model,
                   babModel_->assignSolver(saveSolver);
                   memcpy(bestSolution, babModel_->solver()->getColSolution(),
                          n * sizeof(double));
+		  babModel_->setObjValue(babModel_->solver()->getObjValue());
                 } else {
                   n = babModel_->solver()->getNumCols();
                   bestSolution = new double[n];
                   memcpy(bestSolution, babModel_->solver()->getColSolution(),
                          n * sizeof(double));
+		  babModel_->setObjValue(babModel_->solver()->getObjValue());
 #ifndef CBC_OTHER_SOLVER
 		  // and put back bounds in very original solver
                   ClpSimplex *original = originalSolver->getModelPtr();

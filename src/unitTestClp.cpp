@@ -528,6 +528,13 @@ int CbcClpUnitTest(const CbcModel &saveModel, const std::string &dirMiplibIn,
   double timeTaken = 0.0;
   // tidy original input queue
   std::deque<std::string> inputQueue = originalInputQueue;
+  // See if "maximize"
+  bool maximize = false;
+  for (int i = 0; i < inputQueue.size(); i++) {
+    if (inputQueue[i] == "-maximize") {
+      maximize = true;
+    }
+  }
   {
     // take off first two parameters of initial queue
     inputQueue.pop_front();
@@ -550,6 +557,13 @@ int CbcClpUnitTest(const CbcModel &saveModel, const std::string &dirMiplibIn,
 #endif
   int totalNodes = 0;
   int totalIterations = 0;
+  int totalStrong = 0;
+  int totalStrongIts = 0;
+  int totalStrongFathomed = 0;
+  int totalStrongFixed = 0;
+  int totalFathomCount = 0;
+  int totalExtraNodes = 0;
+  int totalExtraIterations = 0;
   /*
   Open the main loop to step through the MPS problems.
   */
@@ -585,6 +599,22 @@ int CbcClpUnitTest(const CbcModel &saveModel, const std::string &dirMiplibIn,
       std::deque<std::string> newInputQueue;
       char replace[100];
       //newArgv[0] = "unitTestCbc";
+      if (maximize) {
+	solver1.readMps(fn.c_str(), "");
+	double objectiveOffset;
+	solver1.getDblParam(OsiObjOffset, objectiveOffset);
+	solver1.setDblParam(OsiObjOffset, -objectiveOffset);
+	int numberColumns = solver1.getNumCols();
+	double *array =
+	  CoinCopyOfArray(solver1.getObjCoefficients(), numberColumns);
+	for (int i = 0; i < numberColumns; i++)
+	  array[i] = -array[i];
+	solver1.setObjective(array);
+	// keep accuracy
+	solver1.writeMpsNative("maxVersion.mps",NULL,NULL,2);
+	delete[] array;
+	fn = "maxVersion.mps";
+      }
       newInputQueue.push_back(fn);
       for (int i = 0; i < inputQueue.size(); i++) {
 	if (inputQueue[i] != "++") {
@@ -620,7 +650,7 @@ int CbcClpUnitTest(const CbcModel &saveModel, const std::string &dirMiplibIn,
          newInputQueue.push_back("unitTest");
       }
       if (newInputQueue.back()!="-solve")
-	newInputQueue.push_back("-solve"); 
+	newInputQueue.push_back("-solve");
       model = new CbcModel(solver1);
       CbcMain0(*model, parameters);
       CbcMain1(newInputQueue, *model, parameters, callBack);
@@ -954,6 +984,8 @@ int CbcClpUnitTest(const CbcModel &saveModel, const std::string &dirMiplibIn,
   Check for the correct answer.
 */
     double objActual = model->getObjValue();
+    if (maximize)
+      objActual = -objActual;
     double objExpect = objValue[m];
     double tolerance = CoinMin(fabs(objActual), fabs(objExpect));
     tolerance = CoinMax(1.0e-4, 1.0e-5 * tolerance);
@@ -990,6 +1022,14 @@ int CbcClpUnitTest(const CbcModel &saveModel, const std::string &dirMiplibIn,
     }
     totalNodes += model->getNodeCount();
     totalIterations += model->getIterationCount();
+    const int * strongInfo = model->strongInfo();
+    totalStrong += strongInfo[0];
+    totalStrongIts += model->numberStrongIterations();
+    totalStrongFathomed += strongInfo[2];
+    totalStrongFixed += strongInfo[1];
+    totalFathomCount += model->getFathomCount();
+    totalExtraNodes += model->getExtraNodeCount();
+    totalExtraIterations += model->numberExtraIterations();
     timeTaken += timeOfSolution;
     std::cout
       << " -- (" << model->getNodeCount() << " n / "
@@ -1021,11 +1061,16 @@ int CbcClpUnitTest(const CbcModel &saveModel, const std::string &dirMiplibIn,
     std::cout
       << " and took " << timeTaken << " seconds." << std::endl;
     std::cout << "cbc_clp Total nodes " << totalNodes << " and " << totalIterations << " iterations - time " << timeTaken << std::endl;
+    std::cout << "cbc_clp Total Strong " << totalStrong << " times (" <<
+      totalStrongIts << " iterations) - fathomed " <<
+      totalStrongFathomed << " - fixed " << totalStrongFixed << std::endl;
+    std::cout << "cbc_clp Total Fast node fathoming " << totalFathomCount
+	      << " times (" << totalExtraNodes << " nodes, "
+	      << totalExtraIterations << " iterations)" << std::endl;
   }
   if (testSwitch == -2) {
     if (numberFailures || numberOnNodes) {
       std::cout << "****** Unit Test failed." << std::endl;
-      std::cerr << "****** Unit Test failed." << std::endl;
     } else {
       std::cerr << "****** Unit Test succeeded." << std::endl;
     }
