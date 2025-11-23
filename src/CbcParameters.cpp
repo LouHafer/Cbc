@@ -65,6 +65,11 @@ void CbcParameters::init(int strategy){
   lastSolnOut_ = "stdout";
   printMode_ = 0;
   printMask_ = "";
+#ifndef CLP_OUTPUT_FORMAT
+  outputPrecision_ = "%15.8g";
+#else
+  outputPrecision_ = "CLP_OUTPUT_FORMAT";
+#endif
   noPrinting_ = false;
   printWelcome_ = true;
   useSignalHandler_ = false;
@@ -358,6 +363,7 @@ void CbcParameters::setDefaults(int strategy) {
   parameters_[CbcParam::MODELFILE]->setDefault(std::string("prob.mod"));
   parameters_[CbcParam::NEXTSOLFILE]->setDefault(std::string("next.sol"));
   parameters_[CbcParam::PRINTMASK]->setDefault("");
+  parameters_[CbcParam::OUTPUTPRECISION]->setDefault("%15.8g");
   parameters_[CbcParam::PRIORITYFILE]->setDefault(std::string("priorities.txt"));
   parameters_[CbcParam::SOLUTIONFILE]->setDefault(std::string("opt.sol"));
   parameters_[CbcParam::SOLUTIONBINARYFILE]->setDefault(std::string("solution.file"));
@@ -394,7 +400,7 @@ void CbcParameters::setDefaults(int strategy) {
      parameters_[CbcParam::CUTDEPTH]->setDefault(getCutDepth());
      parameters_[CbcParam::CUTLENGTH]->setDefault(-1);
      parameters_[CbcParam::CUTPASSINTREE]->setDefault(1);
-     parameters_[CbcParam::DEPTHMINIBAB]->setDefault(-1);
+     parameters_[CbcParam::DEPTHMINIBAB]->setDefault(1);
      parameters_[CbcParam::DIVEOPT]->setDefault(-1);
      parameters_[CbcParam::DIVEOPTSOLVES]->setDefault(100);
      parameters_[CbcParam::DUMMY]->setDefault(0);
@@ -1131,8 +1137,14 @@ void CbcParameters::addCbcSolverStrParams() {
       "This is only active if model has names.");
   parameters_[CbcParam::PRINTMASK]->setPushFunc(CbcParamUtils::doPrintMaskParam);
 
+  parameters_[CbcParam::OUTPUTPRECISION]->setup(
+      "precision!Output", "Handle format precision with string print mask",
+      "Precision: %.nf -> n digits after decimal; %.ng -> n significant digits; "
+      "Width: %mw -> minimum field width, padded with spaces by default. "
+      "Remember the f or g at end as %18.5 by itself gives garbage."
+  );
+  parameters_[CbcParam::OUTPUTPRECISION]->setPushFunc(CbcParamUtils::doOutputPrecisionParam);
 }
-
 //###########################################################################
 //###########################################################################
 
@@ -1213,6 +1225,7 @@ void CbcParameters::addCbcSolverKwdParams() {
   parameters_[CbcParam::INTPRINT]->appendKwd("boundsall", CbcParameters::PMBoundsAll);
   parameters_[CbcParam::INTPRINT]->appendKwd("fixint", CbcParameters::PMFixInt);
   parameters_[CbcParam::INTPRINT]->appendKwd("fixall", CbcParameters::PMFixAll);
+  parameters_[CbcParam::INTPRINT]->appendKwd("allcsv", CbcParameters::PMAllCsv);
 
   parameters_[CbcParam::NODESTRATEGY]->setup(
       "node!Strategy",
@@ -1271,9 +1284,20 @@ void CbcParameters::addCbcSolverKwdParams() {
   parameters_[CbcParam::PREPROCESS]->appendKwd("strategy", CbcParameters::IPPStrategy);
   parameters_[CbcParam::PREPROCESS]->appendKwd("aggregate", CbcParameters::IPPAggregate);
   parameters_[CbcParam::PREPROCESS]->appendKwd("forcesos", CbcParameters::IPPForceSOS);
+#if CBC_USE_PAPILO
+  parameters_[CbcParam::PREPROCESS]->appendKwd("papilob!egin", CbcParameters::IPPPapilo);
+  parameters_[CbcParam::PREPROCESS]->appendKwd("papilo2b!egin", CbcParameters::IPPPapilo2);
+  parameters_[CbcParam::PREPROCESS]->appendKwd("papilo", CbcParameters::IPPPapiloEnd);
+  parameters_[CbcParam::PREPROCESS]->appendKwd("papilo2", CbcParameters::IPPPapilo2End);
+#endif
   parameters_[CbcParam::PREPROCESS]->appendKwd("stop!aftersaving", CbcParameters::IPPStopAfterSaving);
   parameters_[CbcParam::PREPROCESS]->appendKwd("equalallstop", CbcParameters::IPPEqualAllStop);
-
+#if CBC_USE_PAPILO
+  parameters_[CbcParam::PREPROCESS]->appendKwd("papilobeginstop", CbcParameters::IPPPapiloStop);
+  parameters_[CbcParam::PREPROCESS]->appendKwd("papilo2beginstop", CbcParameters::IPPPapilo2Stop);
+  parameters_[CbcParam::PREPROCESS]->appendKwd("papilostop", CbcParameters::IPPPapiloStopEnd);
+  parameters_[CbcParam::PREPROCESS]->appendKwd("papilo2stop", CbcParameters::IPPPapilo2StopEnd);
+#endif
   parameters_[CbcParam::SOSPRIORITIZE]->setup(
       "sosP!rioritize", "How to deal with SOS priorities", 
       "This sets priorities for SOS.  Values 'high' and 'low' just set a "
@@ -1461,7 +1485,9 @@ void CbcParameters::addCbcSolverIntParams() {
       "500 nodes.  If you really want to switch it off for small problems then "
       "set this to -999.  If >=0 the value doesn't matter very much.  The code "
       "will do approximately 100 nodes of fast branch and bound every now and "
-      "then at depth>=5. The actual logic is too twisted to describe here.");
+      "then at depth>=5. The actual logic is too twisted to describe here. "
+      "The default has been changed from -1 to +1.  This uses Clp and saves "
+       "factorizations etc to be faster.");
 
   parameters_[CbcParam::DIVEOPT]->setup(
       "diveO!pt", "Diving options", -1, 20,

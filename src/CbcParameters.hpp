@@ -137,6 +137,16 @@ public:
     IPPForceSOS,
     IPPStopAfterSaving,
     IPPEqualAllStop,
+#if CBC_USE_PAPILO
+    IPPPapilo,
+    IPPPapilo2,
+    IPPPapiloEnd,
+    IPPPapilo2End,
+    IPPPapiloStop,
+    IPPPapilo2Stop,
+    IPPPapiloStopEnd,
+    IPPPapilo2StopEnd,
+#endif
     IPPEndMarker
   };
 
@@ -464,6 +474,7 @@ public:
     PMBoundsAll,
     PMFixInt,
     PMFixAll,
+    PMAllCsv,
     PMEndMarker
   };
 
@@ -1611,6 +1622,13 @@ public:
    inline std::string getPrintMask() { return (printMask_);
   }
 
+ /*! \brief Get output precision */
+ inline std::string getOutputPrecision() { return (outputPrecision_);
+ }
+
+ /*! \brief Set output precision */
+ inline void setOutputPrecision(std::string outputPrecision) { outputPrecision_ = outputPrecision; }
+
   /*! \brief Set print mask */
    inline void setPrintMask(std::string mask) { printMask_ = mask; }
 
@@ -2057,7 +2075,10 @@ private:
       060920.
     */
   std::string printMask_;
-
+  
+  /*! \brief Printing precision */
+  std::string outputPrecision_;
+  
   /*! \brief Disable printing altogether */
   bool noPrinting_;
 

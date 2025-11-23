@@ -322,7 +322,7 @@ void CbcTreeLocal::passInSolution(const double *solution, double solutionValue)
   if (goodSolution >= 0) {
     delete [] savedSolution_;
     savedSolution_ = saveSolution;
-    bestCutoff_ = CoinMin(solutionValue, model_->getCutoff());
+    bestCutoff_ = std::min(solutionValue, model_->getCutoff());
   }
 }
 // Return the top node of the heap
@@ -338,10 +338,10 @@ CbcTreeLocal::top() const
   for (int i = 0; i < n; i++) {
     int nn = nodes_[i]->nodeInfo()->nodeNumber();
     double dd = nodes_[i]->objectiveValue();
-    largest = CoinMax(largest, nn);
-    smallest = CoinMin(smallest, nn);
-    largestD = CoinMax(largestD, dd);
-    smallestD = CoinMin(smallestD, dd);
+    largest = std::max(largest, nn);
+    smallest = std::min(smallest, nn);
+    largestD = std::max(largestD, dd);
+    smallestD = std::min(smallestD, dd);
   }
   if (model_->messageHandler()->logLevel() > 1) {
     printf("smallest %d, largest %d, top %d\n", smallest, largest,
@@ -631,11 +631,13 @@ bool CbcTreeLocal::empty()
       if (model_->messageHandler()->logLevel() > 1)
         printf("inserting cut - now %d cuts, rhs %g %g, cutspace %g, diversification %d\n",
           n, rowCut->lb(), rowCut->ub(), rhs_, diversification_);
+#ifdef CHECK_KNOWN_SOLUTION
       const OsiRowCutDebugger *debugger = model_->solver()->getRowCutDebuggerAlways();
       if (debugger) {
         if (debugger->invalidCut(*rowCut))
           printf("ZZZZTree Global cut - cuts off optimal solution!\n");
       }
+#endif
       for (int i = 0; i < n; i++) {
         rowCut = global->rowCutPtr(i);
         if (model_->messageHandler()->logLevel() > 1)
@@ -814,7 +816,7 @@ void CbcTreeLocal::reverseCut(int state, double bias)
   double smallest = COIN_DBL_MAX;
   CoinPackedVector row = cut_.row();
   for (int k = 0; k < row.getNumElements(); k++)
-    smallest = CoinMin(smallest, fabs(row.getElements()[k]));
+    smallest = std::min(smallest, fabs(row.getElements()[k]));
   if (!typeCuts_ && !refine_) {
     // Reverse cut very very weakly
     if (state > 2)
@@ -829,11 +831,13 @@ void CbcTreeLocal::reverseCut(int state, double bias)
   if (model_->messageHandler()->logLevel() > 1)
     printf("new rhs %g %g, bias %g smallest %g ",
       rowCut->lb(), rowCut->ub(), bias, smallest);
+#ifdef CHECK_KNOWN_SOLUTION
   const OsiRowCutDebugger *debugger = model_->solver()->getRowCutDebuggerAlways();
   if (debugger) {
     if (debugger->invalidCut(*rowCut))
       printf("ZZZZTree Global cut - cuts off optimal solution!\n");
   }
+#endif
 }
 // Delete last cut branch
 void CbcTreeLocal::deleteCut(OsiRowCut &cut)
@@ -1181,7 +1185,7 @@ void CbcTreeVariable::passInSolution(const double *solution, double solutionValu
   // Check feasible
   int goodSolution = createCut(solution, cut_);
   if (goodSolution >= 0) {
-    bestCutoff_ = CoinMin(solutionValue, model_->getCutoff());
+    bestCutoff_ = std::min(solutionValue, model_->getCutoff());
   } else {
     model_ = NULL;
   }
@@ -1199,10 +1203,10 @@ CbcTreeVariable::top() const
   for (int i = 0; i < n; i++) {
     int nn = nodes_[i]->nodeInfo()->nodeNumber();
     double dd = nodes_[i]->objectiveValue();
-    largest = CoinMax(largest, nn);
-    smallest = CoinMin(smallest, nn);
-    largestD = CoinMax(largestD, dd);
-    smallestD = CoinMin(smallestD, dd);
+    largest = std::max(largest, nn);
+    smallest = std::min(smallest, nn);
+    largestD = std::max(largestD, dd);
+    smallestD = std::min(smallestD, dd);
   }
   if (model_->messageHandler()->logLevel() > 1) {
     printf("smallest %d, largest %d, top %d\n", smallest, largest,
@@ -1492,11 +1496,13 @@ bool CbcTreeVariable::empty()
       if (model_->messageHandler()->logLevel() > 1)
         printf("inserting cut - now %d cuts, rhs %g %g, cutspace %g, diversification %d\n",
           n, rowCut->lb(), rowCut->ub(), rhs_, diversification_);
+#ifdef CHECK_KNOWN_SOLUTION
       const OsiRowCutDebugger *debugger = model_->solver()->getRowCutDebuggerAlways();
       if (debugger) {
         if (debugger->invalidCut(*rowCut))
           printf("ZZZZTree Global cut - cuts off optimal solution!\n");
       }
+#endif
       for (int i = 0; i < n; i++) {
         rowCut = global->rowCutPtr(i);
         if (model_->messageHandler()->logLevel() > 1)
@@ -1666,7 +1672,7 @@ void CbcTreeVariable::reverseCut(int state, double bias)
   double smallest = COIN_DBL_MAX;
   CoinPackedVector row = cut_.row();
   for (int k = 0; k < row.getNumElements(); k++)
-    smallest = CoinMin(smallest, fabs(row.getElements()[k]));
+    smallest = std::min(smallest, fabs(row.getElements()[k]));
   if (!typeCuts_ && !refine_) {
     // Reverse cut very very weakly
     if (state > 2)
@@ -1681,11 +1687,13 @@ void CbcTreeVariable::reverseCut(int state, double bias)
   if (model_->messageHandler()->logLevel() > 1)
     printf("new rhs %g %g, bias %g smallest %g ",
       rowCut->lb(), rowCut->ub(), bias, smallest);
+#ifdef CHECK_KNOWN_SOLUTION
   const OsiRowCutDebugger *debugger = model_->solver()->getRowCutDebuggerAlways();
   if (debugger) {
     if (debugger->invalidCut(*rowCut))
       printf("ZZZZTree Global cut - cuts off optimal solution!\n");
   }
+#endif
 }
 // Delete last cut branch
 void CbcTreeVariable::deleteCut(OsiRowCut &cut)

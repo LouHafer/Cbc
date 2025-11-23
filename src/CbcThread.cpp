@@ -563,13 +563,11 @@ CbcBaseModel::CbcBaseModel(CbcModel &model, int type)
       threadModel_[i]->synchronizeHandlers(1);
       // reduce printout
       threadModel_[i]->messageHandler()->setLogLevel(printLevel);
-#ifdef CBC_HAS_CLP
       // Solver may need to know about model
       CbcModel *thisModel = threadModel_[i];
       CbcOsiSolver *solver = dynamic_cast< CbcOsiSolver * >(thisModel->solver());
       if (solver)
         solver->setCbcModel(thisModel);
-#endif
       children_[i].setUsefulStuff(threadModel_[i], type_, &model,
         children_ + numberThreads_, mutex_main);
 #ifdef THREAD_DEBUG
@@ -1680,7 +1678,7 @@ void CbcModel::moveToModel(CbcModel *baseModel, int mode)
     }
     if (parallelMode() >= 0)
       nodeCompare_ = NULL;
-    baseModel->maximumDepthActual_ = CoinMax(baseModel->maximumDepthActual_, maximumDepthActual_);
+    baseModel->maximumDepthActual_ = std::max(baseModel->maximumDepthActual_, maximumDepthActual_);
     baseModel->numberDJFixed_ += numberDJFixed_;
     baseModel->numberStrongIterations_ += numberStrongIterations_;
     int i;
@@ -1993,6 +1991,7 @@ int CbcModel::parallelCuts(CbcBaseModel *master, OsiCuts &theseCuts,
       }
     }
 #endif
+#ifdef CHECK_KNOWN_SOLUTION
     if ((specialOptions_ & 1) != 0) {
       if (onOptimalPath) {
         int k;
@@ -2016,6 +2015,7 @@ int CbcModel::parallelCuts(CbcBaseModel *master, OsiCuts &theseCuts,
         }
       }
     }
+#endif
     /*
           The cut generator has done its thing, and maybe it generated some
           cuts.  Do a bit of bookkeeping: load

@@ -4,6 +4,28 @@
 
 #ifndef CbcModel_H
 #define CbcModel_H
+#ifdef CBC_MORE_CUTS_ETC
+// Switches on a set of defines with just one define in build procedure
+#define CBC_LAGRANGEAN_SOLVERS 1 // extra pass cuts
+#define CBC_PROBE_10 2 // does more probing at times inside Cbc
+#define CBC_MORE_USE_GLOBAL_CUTS
+// These would have to defined in build procedure as not Cbc
+// CLP_USE_OPENBLAS=1  // Needs openblas and makes serial
+// CLP_OLD_PROGRESS=1 // printout on nodes not time
+// CBC_HAS_CLP
+// COIN_FAST_CODE
+// COIN_USE_RESTRICT
+// COIN_PREFETCH
+// CBC_HAS_NAUTY // may not be needed if nauty well installed
+// CBC_LAGRANGEAN_SOLVERS=1
+// USE_MEMCPY
+// COIN_NOTEST_DUPLICATE
+// CBC_PREPROCESS_EXPERIMENT=1
+// SOS_SUB_STUFF
+// FIXED_BOTH_WAYS=1
+// CGL_HAS_CLP_GOMORY
+// CLP_FACTORIZATION
+#endif
 #include <string>
 #include <vector>
 #include "CbcConfig.h"
@@ -2158,6 +2180,11 @@ public:
   {
     eventHappened_ = true;
   }
+  /// See if event happened
+  inline bool eventHappened()
+  {
+    return eventHappened_;
+  }
   /// Says if normal solver i.e. has well defined CoinPackedMatrix
   inline bool normalSolver() const
   {
@@ -2173,6 +2200,7 @@ public:
   }
   /** Set more special options
         at present bottom 6 bits used for shadow price mode
+	(but if bottom 3 bits are zero next 3 can be used for stuff)
         1024 for experimental hotstart
         2048,4096 breaking out of cuts
         8192 slowly increase minimum drop
@@ -2585,6 +2613,10 @@ public:
 
     */
   int addCuts(CbcNode *node, CoinWarmStartBasis *&lastws);
+#ifdef CBC_MORE_USE_GLOBAL_CUTS
+  /** Fix variables using two element global cuts */
+  void fixFromGlobalCuts();
+#endif
 
   /** Traverse the tree from node to root and prep the model
 
@@ -3079,7 +3111,7 @@ private:
   int *usedInSolution_;
   /**
         Special options
-        0 bit (1) - check if cuts valid (if on debugger list)
+        0 bit (1) - check if cuts valid (if on debugger list) ifdef CHECK_KNOWN_SOLUTION
         1 bit (2) - use current basis to check integer solution (rather than all slack)
         2 bit (4) - don't check integer solution (by solving LP)
         3 bit (8) - fast analyze
@@ -3257,6 +3289,10 @@ private:
   CbcSymmetry *symmetryInfo_;
   /// Root symmetry information
   CbcSymmetry *rootSymmetryInfo_;
+#endif
+#ifdef CBC_PROBE_10 
+  /// Pointer for depth 10 probing etc
+  void *depth10Probing_;
 #endif
   /// Total number of objects
   int numberObjects_;
@@ -3437,7 +3473,6 @@ void setCutAndHeuristicOptions(CbcModel &model);
   inline void setPreProcessingMode(OsiSolverInterface * solver,int processMode)
   {}
 #endif
-#ifdef CBC_HAS_CLP
 /**
    A terse way of doing common types of solves.
    Set any extra options in cbcModel e.g. maximum nodes.
@@ -3453,5 +3488,4 @@ int clpBranchAndCut(CbcModel * cbcModel, ClpSimplex * clpModel,
 		    unsigned int options=5);
 int clpBranchAndCut(CbcModel * cbcModel, OsiClpSolverInterface * solver,
 		    unsigned int options=5);
-#endif
 #endif
